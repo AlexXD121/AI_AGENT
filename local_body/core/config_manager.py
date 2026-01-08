@@ -231,6 +231,27 @@ class ConfigManager:
         # Create and validate config
         self._config = SystemConfig(**config_dict)
         
+        # Perform hardware health check on startup
+        try:
+            from local_body.utils.hardware import HardwareDetector
+            
+            detector = HardwareDetector()
+            hardware_ok = detector.check_system_health(required_ram_gb=8)
+            
+            # If hardware is insufficient and processing mode is not set,
+            # ensure we don't use parallel processing
+            if not hardware_ok:
+                # Log recommendation but don't force change
+                # (user may have explicitly set processing_mode)
+                logger.info(
+                    "Due to limited hardware, consider using 'local' or 'hybrid' "
+                    "processing mode for better stability."
+                )
+        except ImportError:
+            logger.debug("Hardware detection not available, skipping health check")
+        except Exception as e:
+            logger.debug(f"Hardware health check failed: {e}")
+        
         # Perform hardware-aware safety checks
         self._validate_hardware_safety()
         

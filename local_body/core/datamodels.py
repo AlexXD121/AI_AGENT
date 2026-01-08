@@ -4,7 +4,10 @@ This module defines the Pydantic models for representing documents, pages, regio
 conflicts, and related data structures used throughout the system.
 """
 
+import gzip
 import json
+import os
+import tempfile
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -150,11 +153,15 @@ class Document(BaseModel):
             raise ValueError("File path cannot be empty")
         return v
     
-    def save_to_json(self, path: str) -> None:
-        """Save document to JSON file with proper encoding.
+    def save_to_json(self, path: str, compress: bool = True) -> None:
+        """Save document to JSON file with atomic write and optional compression.
+        
+        Uses atomic write pattern (write to temp file, then replace) to prevent
+        corruption during crashes. Optionally compresses with gzip.
         
         Args:
             path: File path to save the JSON document
+            compress: If True, compress with gzip (default: True)
             
         Raises:
             PermissionError: If the file cannot be written due to permissions
@@ -168,8 +175,37 @@ class Document(BaseModel):
             # Serialize to JSON with proper formatting
             json_str = self.model_dump_json(indent=2)
             
-            # Write with UTF-8 encoding
-            file_path.write_text(json_str, encoding='utf-8')
+            # Atomic write: write to temp file first, then replace
+            # This prevents corruption if process crashes during write
+            temp_fd, temp_path = tempfile.mkstemp(
+                dir=file_path.parent,
+                prefix=f".{file_path.name}.",
+                suffix=".tmp"
+            )
+            
+            try:
+                if compress:
+                    # Write compressed
+                    with gzip.open(temp_path, 'wt', encoding='utf-8') as f:
+                        f.write(json_str)
+                else:
+                    # Write uncompressed
+                    with os.fdopen(temp_fd, 'w', encoding='utf-8') as f:
+                        f.write(json_str)
+                        temp_fd = None  # Prevent double close
+                
+                # Atomic replace: this is atomic on POSIX and Windows
+                os.replace(temp_path, str(file_path))
+                
+            finally:
+                # Clean up temp file if something went wrong
+                if temp_fd is not None:
+                    os.close(temp_fd)
+                if os.path.exists(temp_path):
+                    try:
+                        os.unlink(temp_path)
+                    except OSError:
+                        pass
             
         except PermissionError as e:
             raise PermissionError(
@@ -183,7 +219,9 @@ class Document(BaseModel):
     
     @classmethod
     def from_json(cls, path: str) -> 'Document':
-        """Load document from JSON file with validation.
+        """Load document from JSON file with automatic gzip detection.
+        
+        Automatically detects and handles gzip-compressed files (*.gz extension).
         
         Args:
             path: File path to load the JSON document from
@@ -202,8 +240,14 @@ class Document(BaseModel):
             raise FileNotFoundError(f"Document file not found: '{path}'")
         
         try:
-            # Read JSON content
-            json_str = file_path.read_text(encoding='utf-8')
+            # Auto-detect gzip compression by file extension
+            if str(file_path).endswith('.gz'):
+                # Read gzip-compressed file
+                with gzip.open(file_path, 'rt', encoding='utf-8') as f:
+                    json_str = f.read()
+            else:
+                # Read uncompressed file
+                json_str = file_path.read_text(encoding='utf-8')
             
             # Parse and validate against Pydantic schema
             data = json.loads(json_str)
@@ -435,6 +479,38 @@ class Conflict(BaseModel):
         
         # Update the stored impact score
         self.impact_score = min(impact, 1.0)  # Cap at 1.0 for consistency
+        
+        return self.impact_score
+    
+    def calculate_impact(self) -> float:
+        """Calculate conflict impact score using stored confidence scores.
+        
+        This is a convenience method that calculates impact without needing
+        to specify region_type. Uses a default base impact of 0.75.
+        
+        Formula: (Base Impact * Discrepancy) * Confidence Boost
+        - Base Impact: 0.75 (moderate priority)
+        - Discrepancy: self.discrepancy_percentage
+        - Confidence Boost: 1.5x if both confidences > 0.7, else 1.0x
+        
+        Returns:
+            Calculated impact score (0.0 to 1.5)
+        """
+        # Base impact (moderate priority)
+        base_impact = 0.75
+        
+        # Scale by discrepancy
+        impact = base_impact * min(self.discrepancy_percentage, 1.0)
+        
+        # Apply confidence boost
+        text_conf = self.confidence_scores.get("text", 0.0)
+        vision_conf = self.confidence_scores.get("vision", 0.0)
+        
+        if text_conf > 0.7 and vision_conf > 0.7:
+            impact *= 1.5
+        
+        # Update stored impact score
+        self.impact_score = min(impact, 1.0)  # Cap at 1.0
         
         return self.impact_score
     

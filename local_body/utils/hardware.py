@@ -183,3 +183,49 @@ class HardwareDetector:
         
         # Clamp between 1 and 20
         return max(1, min(estimated_batch_size, 20))
+    
+    def check_system_health(self, required_ram_gb: int = 8) -> bool:
+        """Check if system meets minimum hardware requirements.
+        
+        Validates system has sufficient RAM and logs hardware stats on startup.
+        This is typically called during application initialization.
+        
+        Args:
+            required_ram_gb: Minimum required RAM in GB (default: 8)
+            
+        Returns:
+            True if system meets requirements, False otherwise
+        """
+        from loguru import logger
+        
+        # Get system info
+        total_ram = self.get_total_ram_gb()
+        available_ram = self.get_available_ram_gb()
+        cpu_cores = self.get_cpu_cores()
+        has_gpu = self.has_gpu()
+        
+        # Log hardware stats on startup
+        logger.info(f"System Hardware Detection:")
+        logger.info(f"  - Total RAM: {total_ram:.1f}GB")
+        logger.info(f"  - Available RAM: {available_ram:.1f}GB")
+        logger.info(f"  - CPU Cores: {cpu_cores}")
+        logger.info(f"  - GPU Available: {has_gpu}")
+        
+        if has_gpu:
+            gpu_info = self.get_gpu_info()
+            if gpu_info:
+                logger.info(f"  - GPU Type: {gpu_info.get('type', 'Unknown')}")
+                logger.info(f"  - GPU Name: {gpu_info.get('name', 'Unknown')}")
+        
+        # Check if system meets minimum requirements
+        if total_ram < required_ram_gb:
+            logger.warning(
+                f"System has {total_ram:.1f}GB RAM, which is below the "
+                f"recommended minimum of {required_ram_gb}GB. "
+                f"Performance may be degraded. Consider reducing batch sizes "
+                f"or upgrading hardware."
+            )
+            return False
+        
+        logger.info(f"✓ System meets minimum hardware requirements ({required_ram_gb}GB RAM)")
+        return True

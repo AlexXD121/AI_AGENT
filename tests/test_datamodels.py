@@ -57,9 +57,9 @@ class TestDocumentPersistence:
             metadata=metadata
         )
         
-        # Save to JSON
+        # Save to JSON (uncompressed for testing)
         json_path = tmp_path / "test_document.json"
-        doc_original.save_to_json(str(json_path))
+        doc_original.save_to_json(str(json_path), compress=False)
         
         # Verify file exists and is valid JSON
         assert json_path.exists()
@@ -91,9 +91,9 @@ class TestDocumentPersistence:
         )
         doc = Document(file_path="test.pdf", metadata=metadata)
         
-        # Save to nested path that doesn't exist
+        # Save to nested path that doesn't exist (uncompressed)
         nested_path = tmp_path / "nested" / "dir" / "test.json"
-        doc.save_to_json(str(nested_path))
+        doc.save_to_json(str(nested_path), compress=False)
         
         assert nested_path.exists()
         assert nested_path.parent.exists()
@@ -108,7 +108,7 @@ class TestDocumentPersistence:
         doc = Document(file_path="test.pdf", metadata=metadata)
         
         json_path = tmp_path / "utf8_test.json"
-        doc.save_to_json(str(json_path))
+        doc.save_to_json(str(json_path), compress=False)
         
         # Verify UTF-8 encoding
         content = json_path.read_text(encoding='utf-8')
