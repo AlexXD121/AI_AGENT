@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, SecretStr, field_validator
+from loguru import logger
 
 
 class SystemConfig(BaseModel):
@@ -19,6 +20,12 @@ class SystemConfig(BaseModel):
     by environment variables prefixed with SOVEREIGN_.
     """
     
+    # Profile settings
+    profile: str = Field(
+        default="dev",
+        description="Configuration profile: dev, prod, or demo"
+    )
+    
     # Processing settings
     processing_mode: str = Field(
         default="hybrid",
@@ -26,9 +33,9 @@ class SystemConfig(BaseModel):
     )
     conflict_threshold: float = Field(
         default=0.15,
-        ge=0.05,
-        le=0.30,
-        description="Threshold for conflict detection (5-30%)"
+        ge=0.0,
+        le=1.0,
+        description="Threshold for conflict detection (0-100%)"
     )
     batch_size: int = Field(
         default=5,
@@ -73,7 +80,11 @@ class SystemConfig(BaseModel):
         description="Minimum vision model confidence threshold"
     )
     
-    # Colab settings
+    # Colab settings (sensitive)
+    ngrok_token: Optional[SecretStr] = Field(
+        default=None,
+        description="ngrok auth token (loaded from env only)"
+    )
     ngrok_url: Optional[str] = Field(
         default=None,
         description="ngrok tunnel URL for Colab connection"
@@ -119,6 +130,15 @@ class SystemConfig(BaseModel):
         description="Log file rotation size"
     )
     
+    @field_validator('profile')
+    @classmethod
+    def validate_profile(cls, v: str) -> str:
+        """Validate profile is one of the allowed values."""
+        allowed = ["dev", "prod", "demo"]
+        if v not in allowed:
+            raise ValueError(f"profile must be one of {allowed}, got '{v}'")
+        return v
+    
     @field_validator('processing_mode')
     @classmethod
     def validate_processing_mode(cls, v: str) -> str:
@@ -126,6 +146,30 @@ class SystemConfig(BaseModel):
         allowed = ["local", "hybrid", "remote"]
         if v not in allowed:
             raise ValueError(f"processing_mode must be one of {allowed}, got '{v}'")
+        return v
+    
+    @field_validator('conflict_threshold')
+    @classmethod
+    def validate_conflict_threshold(cls, v: float) -> float:
+        """Validate conflict threshold and warn if outside recommended range."""
+        if not 0.0 <= v <= 1.0:
+            raise ValueError(f"conflict_threshold must be between 0.0 and 1.0, got {v}")
+        
+        # Warn if outside recommended range
+        if v < 0.10 or v > 0.20:
+            logger.warning(
+                f"conflict_threshold={v} is outside recommended range (0.10-0.20). "
+                f"This may result in too many or too few conflicts being detected."
+            )
+        
+        return v
+    
+    @field_validator('batch_size')
+    @classmethod
+    def validate_batch_size(cls, v: int) -> int:
+        """Validate batch size is positive."""
+        if v <= 0:
+            raise ValueError(f"batch_size must be > 0, got {v}")
         return v
     
     @field_validator('log_level')
@@ -181,8 +225,15 @@ class ConfigManager:
         env_overrides = self._load_from_env()
         config_dict.update(env_overrides)
         
+        # Apply profile-specific settings
+        config_dict = self._apply_profile_settings(config_dict)
+        
         # Create and validate config
         self._config = SystemConfig(**config_dict)
+        
+        # Perform hardware-aware safety checks
+        self._validate_hardware_safety()
+        
         return self._config
     
     def _load_from_env(self) -> Dict[str, Any]:
@@ -191,11 +242,17 @@ class ConfigManager:
         Environment variables should be prefixed with SOVEREIGN_ and use
         uppercase with underscores (e.g., SOVEREIGN_NGROK_URL).
         
+        Sensitive settings (tokens, credentials) are ONLY loaded from env vars.
+        
         Returns:
             Dictionary of configuration overrides from environment
         """
         env_config = {}
         prefix = "SOVEREIGN_"
+        
+        # Load profile from environment (default: dev)
+        env_profile = os.getenv(f"{prefix}ENV", os.getenv(f"{prefix}PROFILE", "dev"))
+        env_config["profile"] = env_profile
         
         # Map of environment variable names to config keys
         env_mappings = {
@@ -208,6 +265,7 @@ class ConfigManager:
             f"{prefix}HAS_GPU": ("has_gpu", lambda x: x.lower() in ['true', '1', 'yes']),
             f"{prefix}OCR_CONFIDENCE_THRESHOLD": ("ocr_confidence_threshold", float),
             f"{prefix}VISION_CONFIDENCE_THRESHOLD": ("vision_confidence_threshold", float),
+            f"{prefix}NGROK_TOKEN": "ngrok_token",  # Sensitive: env only
             f"{prefix}NGROK_URL": "ngrok_url",
             f"{prefix}TUNNEL_TIMEOUT": ("tunnel_timeout", int),
             f"{prefix}VECTOR_COLLECTION": "vector_collection",
@@ -227,11 +285,88 @@ class ConfigManager:
                     try:
                         env_config[config_key] = converter(value)
                     except (ValueError, TypeError) as e:
-                        print(f"Warning: Failed to convert {env_var}={value}: {e}")
+                        logger.warning(f"Failed to convert {env_var}={value}: {e}")
                 else:
                     env_config[mapping] = value
         
         return env_config
+    
+    def _apply_profile_settings(self, config_dict: Dict[str, Any]) -> Dict[str, Any]:
+        """Apply profile-specific configuration overrides.
+        
+        Profiles:
+        - dev: Verbose logging, small batches, relaxed thresholds
+        - prod: Minimal logging, optimized batches, strict thresholds
+        - demo: UI-focused, pre-cached results
+        
+        Args:
+            config_dict: Base configuration dictionary
+            
+        Returns:
+            Configuration with profile-specific overrides applied
+        """
+        profile = config_dict.get("profile", "dev")
+        
+        if profile == "prod":
+            # Production: stricter settings
+            config_dict.setdefault("log_level", "INFO")
+            config_dict.setdefault("conflict_threshold", 0.12)  # Stricter
+            config_dict.setdefault("batch_size", 10)  # Larger batches
+            logger.info("Loaded PRODUCTION profile: stricter logging and thresholds")
+            
+        elif profile == "demo":
+            # Demo: UI-focused
+            config_dict.setdefault("log_level", "WARNING")
+            config_dict.setdefault("batch_size", 3)  # Smaller for responsiveness
+            logger.info("Loaded DEMO profile: UI-focused configuration")
+            
+        else:  # dev
+            # Development: verbose logging
+            config_dict.setdefault("log_level", "DEBUG")
+            config_dict.setdefault("batch_size", 5)
+            logger.info("Loaded DEVELOPMENT profile: verbose logging enabled")
+        
+        return config_dict
+    
+    def _validate_hardware_safety(self) -> None:
+        """Validate configuration against hardware capabilities.
+        
+        Checks if batch size and memory settings are safe for the system.
+        Logs warnings if configuration may cause issues.
+        """
+        if self._config is None:
+            return
+        
+        try:
+            from local_body.utils.hardware import HardwareDetector
+            
+            detector = HardwareDetector()
+            total_ram = detector.get_total_ram_gb()
+            available_ram = detector.get_available_ram_gb()
+            
+            # Estimate memory usage: ~500MB per document in batch
+            estimated_usage_gb = self._config.batch_size * 0.5
+            
+            # Check if batch size is too large for available RAM
+            if estimated_usage_gb > available_ram * 0.7:  # Use max 70% of available RAM
+                recommended_batch = detector.recommend_batch_size(total_ram)
+                logger.warning(
+                    f"Batch size ({self._config.batch_size}) may be too large for available RAM ({available_ram:.1f}GB). "
+                    f"Estimated usage: {estimated_usage_gb:.1f}GB. "
+                    f"Recommended batch size: {recommended_batch}"
+                )
+            
+            # Validate minimum RAM requirement
+            if not detector.validate_resource_availability(4.0):
+                logger.error(
+                    f"System has insufficient RAM ({total_ram:.1f}GB). "
+                    f"Minimum 4GB required. System may be unstable."
+                )
+        
+        except ImportError:
+            logger.debug("Hardware detection not available, skipping safety checks")
+        except Exception as e:
+            logger.debug(f"Hardware safety check failed: {e}")
     
     def get_config(self) -> SystemConfig:
         """Get the current configuration.

@@ -4,8 +4,10 @@ This module defines the Pydantic models for representing documents, pages, regio
 conflicts, and related data structures used throughout the system.
 """
 
+import json
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 from uuid import uuid4
 
@@ -147,6 +149,126 @@ class Document(BaseModel):
         if not v or not v.strip():
             raise ValueError("File path cannot be empty")
         return v
+    
+    def save_to_json(self, path: str) -> None:
+        """Save document to JSON file with proper encoding.
+        
+        Args:
+            path: File path to save the JSON document
+            
+        Raises:
+            PermissionError: If the file cannot be written due to permissions
+            OSError: If the path is invalid or other IO errors occur
+        """
+        try:
+            file_path = Path(path)
+            # Ensure parent directory exists
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Serialize to JSON with proper formatting
+            json_str = self.model_dump_json(indent=2)
+            
+            # Write with UTF-8 encoding
+            file_path.write_text(json_str, encoding='utf-8')
+            
+        except PermissionError as e:
+            raise PermissionError(
+                f"Permission denied when writing to '{path}'. "
+                f"Check file permissions and try again."
+            ) from e
+        except OSError as e:
+            raise OSError(
+                f"Failed to write document to '{path}': {e}"
+            ) from e
+    
+    @classmethod
+    def from_json(cls, path: str) -> 'Document':
+        """Load document from JSON file with validation.
+        
+        Args:
+            path: File path to load the JSON document from
+            
+        Returns:
+            Validated Document instance
+            
+        Raises:
+            FileNotFoundError: If the file doesn't exist
+            ValueError: If the JSON is invalid or doesn't match schema
+            OSError: If other IO errors occur
+        """
+        file_path = Path(path)
+        
+        if not file_path.exists():
+            raise FileNotFoundError(f"Document file not found: '{path}'")
+        
+        try:
+            # Read JSON content
+            json_str = file_path.read_text(encoding='utf-8')
+            
+            # Parse and validate against Pydantic schema
+            data = json.loads(json_str)
+            return cls(**data)
+            
+        except json.JSONDecodeError as e:
+            raise ValueError(
+                f"Invalid JSON in file '{path}': {e}"
+            ) from e
+        except OSError as e:
+            raise OSError(
+                f"Failed to read document from '{path}': {e}"
+            ) from e
+    
+    def validate_integrity(self) -> bool:
+        """Validate document data integrity.
+        
+        Performs comprehensive integrity checks:
+        1. Page count matches metadata
+        2. All page numbers are unique
+        3. All regions have valid bounding boxes
+        
+        Returns:
+            True if all integrity checks pass
+            
+        Raises:
+            ValueError: If any integrity check fails with descriptive message
+        """
+        # Check 1: Verify page count matches metadata
+        actual_page_count = len(self.pages)
+        expected_page_count = self.metadata.page_count
+        
+        if actual_page_count != expected_page_count:
+            raise ValueError(
+                f"Page count mismatch: metadata declares {expected_page_count} pages, "
+                f"but document contains {actual_page_count} pages"
+            )
+        
+        # Check 2: Verify all page numbers are unique
+        page_numbers = [page.page_number for page in self.pages]
+        if len(page_numbers) != len(set(page_numbers)):
+            duplicates = [num for num in page_numbers if page_numbers.count(num) > 1]
+            raise ValueError(
+                f"Duplicate page numbers detected: {set(duplicates)}. "
+                f"Each page must have a unique page_number."
+            )
+        
+        # Check 3: Verify all regions have valid bounding boxes
+        for page_idx, page in enumerate(self.pages, 1):
+            for region_idx, region in enumerate(page.regions, 1):
+                bbox = region.bbox
+                
+                if bbox.width <= 0:
+                    raise ValueError(
+                        f"Invalid bounding box on page {page_idx}, region {region_idx}: "
+                        f"width must be > 0, got {bbox.width}"
+                    )
+                
+                if bbox.height <= 0:
+                    raise ValueError(
+                        f"Invalid bounding box on page {page_idx}, region {region_idx}: "
+                        f"height must be > 0, got {bbox.height}"
+                    )
+        
+        return True
 
 
 class ConflictType(str, Enum):
@@ -209,6 +331,142 @@ class Conflict(BaseModel):
         default_factory=datetime.utcnow, 
         description="Timestamp when conflict was detected"
     )
+    
+    @staticmethod
+    def normalize_value(value: Any) -> float:
+        """Normalize various value formats to standard float.
+        
+        Handles common financial and numeric formats:
+        - Currency: "$5.2M", "$1,234.56"
+        - Percentages: "15%", "0.15"
+        - Large numbers: "5.2M", "1.5B", "3.4K"
+        - Comma-separated: "1,234,567"
+        
+        Args:
+            value: Value to normalize (str, int, float, or None)
+            
+        Returns:
+            Normalized float value
+            
+        Raises:
+            ValueError: If value cannot be converted to a number
+        """
+        import re
+        
+        # Handle None
+        if value is None:
+            return 0.0
+        
+        # Already a number
+        if isinstance(value, (int, float)):
+            return float(value)
+        
+        # Convert to string and clean
+        value_str = str(value).strip()
+        
+        if not value_str:
+            return 0.0
+        
+        # Remove currency symbols and whitespace
+        value_str = re.sub(r'[$€£¥]', '', value_str)
+        value_str = value_str.strip()
+        
+        # Handle percentages
+        if '%' in value_str:
+            value_str = value_str.replace('%', '')
+            try:
+                return float(value_str) / 100.0
+            except ValueError:
+                raise ValueError(f"Cannot convert percentage '{value}' to float")
+        
+        # Handle multipliers (M, B, K)
+        multipliers = {
+            'K': 1_000,
+            'M': 1_000_000,
+            'B': 1_000_000_000,
+            'T': 1_000_000_000_000
+        }
+        
+        for suffix, multiplier in multipliers.items():
+            if value_str.upper().endswith(suffix):
+                value_str = value_str[:-1].strip()
+                try:
+                    # Remove commas before conversion
+                    value_str = value_str.replace(',', '')
+                    return float(value_str) * multiplier
+                except ValueError:
+                    raise ValueError(f"Cannot convert '{value}' to float")
+        
+        # Handle comma-separated numbers
+        value_str = value_str.replace(',', '')
+        
+        # Try direct conversion
+        try:
+            return float(value_str)
+        except ValueError:
+            raise ValueError(f"Cannot convert '{value}' to float")
+    
+    def update_impact_score(self, region_type: str) -> float:
+        """Calculate and update the impact score for conflict prioritization.
+        
+        Impact score calculation logic (from design specification):
+        1. Base impact: 1.0 for tables, 0.5 for other types
+        2. Scale by discrepancy percentage (capped at 1.0)
+        3. Boost by 1.5x if both text and vision confidence > 0.7
+        
+        Args:
+            region_type: Type of region ("text", "table", "image", "chart")
+            
+        Returns:
+            Calculated impact score (0.0 to 1.5)
+        """
+        # Higher priority for financial figures (tables)
+        impact = 1.0 if region_type == "table" else 0.5
+        
+        # Scale by discrepancy magnitude (capped at 1.0)
+        impact *= min(self.discrepancy_percentage, 1.0)
+        
+        # Boost if both confidences are high (genuine disagreement)
+        text_conf = self.confidence_scores.get("text", 0.0)
+        vision_conf = self.confidence_scores.get("vision", 0.0)
+        
+        if text_conf > 0.7 and vision_conf > 0.7:
+            impact *= 1.5
+        
+        # Update the stored impact score
+        self.impact_score = min(impact, 1.0)  # Cap at 1.0 for consistency
+        
+        return self.impact_score
+    
+    def resolve(self, resolution: 'ConflictResolution') -> None:
+        """Mark conflict as resolved with the given resolution.
+        
+        Updates the conflict status and resolution method based on the
+        provided resolution. This creates an audit trail for conflict
+        resolution history.
+        
+        Args:
+            resolution: ConflictResolution instance with resolution details
+        """
+        self.resolution_status = ResolutionStatus.RESOLVED
+        self.resolution_method = resolution.resolution_method
+        
+        # Note: The resolution timestamp is stored in the ConflictResolution object
+        # This maintains separation of concerns and allows multiple resolution attempts
+    
+    def flag(self, reason: Optional[str] = None) -> None:
+        """Flag conflict for manual review.
+        
+        Marks the conflict as requiring special attention, typically when
+        automated resolution is not possible or confidence is too low.
+        
+        Args:
+            reason: Optional reason for flagging the conflict
+        """
+        self.resolution_status = ResolutionStatus.FLAGGED
+        
+        # Note: The reason can be stored in a separate audit log or
+        # in the ConflictResolution notes field when eventually resolved
 
 
 class ConflictResolution(BaseModel):

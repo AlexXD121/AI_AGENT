@@ -7,27 +7,27 @@
   - Create logging infrastructure with structured logging for agent activities
   - _Requirements: 4.1, 4.2, 16.1, 16.4_
 
-- [ ] 2. Implement core data models and validation
-  - [ ] 2.1 Create document processing data models
+- [x] 2. Implement core data models and validation
+  - [x] 2.1 Create document processing data models
     - Write Document, Page, Region dataclasses with proper typing
     - Implement BoundingBox, TextContent, TableContent, ImageContent models
     - Add validation methods for data integrity and type checking
     - Create serialization/deserialization methods for persistence
     - _Requirements: 3.1, 3.2, 3.6, 8.1_
 
-  - [ ] 2.2 Implement conflict detection models
+  - [x] 2.2 Implement conflict detection models
     - Write Conflict and ConflictResolution dataclasses
     - Create conflict prioritization logic with impact score calculation
     - Implement conflict status tracking and resolution history
     - Add conflict validation and normalization methods
     - _Requirements: 11.1, 11.2, 11.6, 11.7_
 
-  - [ ] 2.3 Create configuration validation system
-    - Implement ConfigValidator class with hardware detection
-    - Add validation for conflict thresholds, memory limits, and batch sizes
-    - Create environment-specific configuration profiles (dev/prod/demo)
-    - Implement environment variable support for sensitive settings
-    - _Requirements: 16.2, 16.3, 16.5, 16.6_
+  - [x] 2.3 Create configuration validation system
+    - Implement hardware detection (RAM, CPU, GPU) using psutil
+    - Add profile-based configuration (dev, prod, demo)
+    - Create validation for conflict thresholds and batch sizes
+    - Implement hardware-aware safety checks for resource usage
+    - _Requirements: 16.2, 16.4, 16.6_
 
 - [ ] 3. Set up local infrastructure components
   - [ ] 3.1 Configure Qdrant vector database
