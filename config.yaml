@@ -1,0 +1,32 @@
+# Sovereign-Doc System Configuration
+# This file contains default settings for the document processing system
+
+# Processing Settings
+processing_mode: hybrid  # Options: local, hybrid, remote
+conflict_threshold: 0.15  # Threshold for conflict detection (0.05-0.30)
+batch_size: 5  # Number of documents to process in a batch
+max_memory_usage: 0.85  # Maximum memory usage threshold (0.5-0.95)
+
+# Hardware Settings
+cpu_cores: 4  # Number of CPU cores to use
+available_ram_gb: 8  # Available RAM in GB
+has_gpu: false  # Whether GPU is available
+
+# Model Settings
+ocr_confidence_threshold: 0.6  # Minimum OCR confidence threshold
+vision_confidence_threshold: 0.7  # Minimum vision model confidence threshold
+
+# Colab Settings
+ngrok_url: null  # ngrok tunnel URL (set via environment or update here)
+tunnel_timeout: 30  # Tunnel connection timeout in seconds
+
+# Qdrant Vector Database Settings
+vector_collection: documents  # Collection name for document vectors
+embedding_model: BGE-small-en-v1.5  # Embedding model for text
+qdrant_host: localhost  # Qdrant server host
+qdrant_port: 6333  # Qdrant server port
+
+# Logging Settings
+log_level: INFO  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+log_file_path: data/logs/sovereign.log  # Path to log file
+log_rotation: 500 MB  # Log file rotation size
