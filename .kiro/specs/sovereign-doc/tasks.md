@@ -30,14 +30,14 @@
     - _Requirements: 16.2, 16.4, 16.6_
 
 - [ ] 3. Set up local infrastructure components
-  - [ ] 3.1 Configure Qdrant vector database
+  - [x] 3.1 Configure Qdrant vector database
     - Create Docker Compose configuration for Qdrant service
     - Implement QdrantClient wrapper with connection management
     - Set up document collection schema with hierarchical metadata
     - Create health check and reconnection logic for database
     - _Requirements: 4.3, 8.1, 8.7_
 
-  - [ ] 3.2 Initialize Ollama local models
+  - [x] 3.2 Initialize Ollama local models
     - Create model management service for Ollama integration
     - Implement automatic model pulling (llama3.2, llama3.2-vision)
     - Add model health checks and fallback mechanisms
