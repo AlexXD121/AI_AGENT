@@ -38,6 +38,15 @@ torch>=2.0.0  # PyTorch backend (CPU version)
 qdrant-client>=1.7.0
 # fastembed>=0.2.0  # Commented out due to Python 3.14 incompatibility
 
+# Secure Tunneling
+pyngrok>=7.0.0  # ngrok tunnel management for cloud-local communication
+
+# FastAPI (for Cloud Brain server testing)
+fastapi>=0.100.0
+uvicorn>=0.20.0
+python-multipart
+httpx  # Required for FastAPI TestClient
+
 # Testing
 pytest>=8.0.0
 pytest-asyncio>=0.23.0
