@@ -7,13 +7,23 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 
+from local_body.core.config_manager import SystemConfig
 from local_body.utils.model_manager import ModelManager
 
 
 @pytest.fixture
-def model_manager():
+def mock_config():
+    """Create a mock SystemConfig for testing."""
+    config = SystemConfig(
+        required_ollama_models=["llama3.2", "llama3.2-vision"]
+    )
+    return config
+
+
+@pytest.fixture
+def model_manager(mock_config):
     """Create a ModelManager instance for testing."""
-    return ModelManager(base_url="http://localhost:11434")
+    return ModelManager(config=mock_config, base_url="http://localhost:11434")
 
 
 class TestModelManager:

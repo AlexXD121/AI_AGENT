@@ -6,7 +6,7 @@ from YAML files and environment variables.
 
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import yaml
 from pydantic import BaseModel, Field, SecretStr, field_validator
@@ -102,7 +102,7 @@ class SystemConfig(BaseModel):
         description="Qdrant collection name for document vectors"
     )
     embedding_model: str = Field(
-        default="BGE-small-en-v1.5",
+        default="BAAI/bge-small-en-v1.5",
         description="Embedding model for text vectorization"
     )
     qdrant_host: str = Field(
@@ -114,6 +114,12 @@ class SystemConfig(BaseModel):
         ge=1,
         le=65535,
         description="Qdrant server port"
+    )
+    
+    # Ollama settings
+    required_ollama_models: List[str] = Field(
+        default=["llama3.2", "llama3.2-vision"],
+        description="Required Ollama models for local inference"
     )
     
     # Logging settings
@@ -293,6 +299,7 @@ class ConfigManager:
             f"{prefix}EMBEDDING_MODEL": "embedding_model",
             f"{prefix}QDRANT_HOST": "qdrant_host",
             f"{prefix}QDRANT_PORT": ("qdrant_port", int),
+            f"{prefix}REQUIRED_OLLAMA_MODELS": ("required_ollama_models", lambda x: x.split(',')),
             f"{prefix}LOG_LEVEL": "log_level",
             f"{prefix}LOG_FILE_PATH": "log_file_path",
             f"{prefix}LOG_ROTATION": "log_rotation",

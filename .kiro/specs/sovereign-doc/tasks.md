@@ -29,7 +29,7 @@
     - Implement hardware-aware safety checks for resource usage
     - _Requirements: 16.2, 16.4, 16.6_
 
-- [ ] 3. Set up local infrastructure components
+- [x] 3. Set up local infrastructure components
   - [x] 3.1 Configure Qdrant vector database
     - Create Docker Compose configuration for Qdrant service
     - Implement QdrantClient wrapper with connection management
@@ -44,7 +44,7 @@
     - Create resource monitoring for local model usage
     - _Requirements: 4.4, 7.2, 10.3_
 
-  - [ ] 3.3 Implement document preprocessing pipeline
+  - [x] 3.3 Implement document preprocessing pipeline
     - Create PDF parsing and image extraction utilities
     - Implement image preprocessing (denoise, sharpen, binarization)
     - Add document type detection and metadata extraction

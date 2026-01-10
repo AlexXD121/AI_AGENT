@@ -24,10 +24,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Install fastembed (not in requirements.txt due to Python 3.14 incompatibility)
-RUN pip install --no-cache-dir fastembed==0.6.1
+RUN pip install --no-cache-dir fastembed>=0.2.0
 
-# Install pytest
-RUN pip install --no-cache-dir pytest pytest-asyncio
+# Install pytest and async support
+RUN pip install --no-cache-dir pytest>=8.0.0 pytest-asyncio>=0.23.0
 
 # Copy project files (will be mounted at runtime)
 # COPY . .

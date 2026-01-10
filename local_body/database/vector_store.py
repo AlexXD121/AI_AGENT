@@ -9,7 +9,7 @@ from uuid import uuid5, NAMESPACE_DNS
 
 from fastembed import TextEmbedding
 from loguru import logger
-from qdrant_client import QdrantClient
+from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 from qdrant_client.http.exceptions import UnexpectedResponse
 
@@ -21,9 +21,9 @@ class DocumentVectorStore:
     """Vector store for document embeddings using Qdrant and FastEmbed.
     
     This class handles:
-    - Initialization of Qdrant client and embedding model
+    - Initialization of async Qdrant client and embedding model
     - Collection management with proper vector configuration
-    - Document storage with page-level embeddings
+    - Document storage with page-level batch embeddings
     - Semantic search functionality
     - Health checks and connection management
     """
@@ -36,11 +36,11 @@ class DocumentVectorStore:
         """
         self.config = config
         
-        # Initialize Qdrant client
+        # Initialize async Qdrant client
         logger.info(
-            f"Initializing Qdrant client: {config.qdrant_host}:{config.qdrant_port}"
+            f"Initializing async Qdrant client: {config.qdrant_host}:{config.qdrant_port}"
         )
-        self.client = QdrantClient(
+        self.client = AsyncQdrantClient(
             host=config.qdrant_host,
             port=config.qdrant_port,
             timeout=30.0
@@ -52,18 +52,17 @@ class DocumentVectorStore:
         try:
             # Suppress fastembed download progress for cleaner logs
             self.embedding_model = TextEmbedding(
-                model_name="BAAI/bge-small-en-v1.5"
+                model_name=config.embedding_model
             )
             logger.success("Embedding model loaded successfully")
         except Exception as e:
             logger.error(f"Failed to load embedding model: {e}")
             raise
         
-        # Ensure collection exists
+        # Collection name
         self.collection_name = config.vector_collection
-        self.ensure_collection_exists()
     
-    def ensure_collection_exists(self) -> None:
+    async def ensure_collection_exists(self) -> None:
         """Ensure the document collection exists with proper configuration.
         
         Creates the collection if it doesn't exist with:
@@ -72,7 +71,7 @@ class DocumentVectorStore:
         """
         try:
             # Check if collection exists
-            collections = self.client.get_collections()
+            collections = await self.client.get_collections()
             collection_names = [col.name for col in collections.collections]
             
             if self.collection_name in collection_names:
@@ -81,7 +80,7 @@ class DocumentVectorStore:
             
             # Create collection with proper vector configuration
             logger.info(f"Creating collection '{self.collection_name}'")
-            self.client.create_collection(
+            await self.client.create_collection(
                 collection_name=self.collection_name,
                 vectors_config=VectorParams(
                     size=384,  # BGE-small-en-v1.5 embedding dimension
@@ -94,7 +93,7 @@ class DocumentVectorStore:
             logger.error(f"Failed to ensure collection exists: {e}")
             raise
     
-    def check_health(self) -> bool:
+    async def check_health(self) -> bool:
         """Check if Qdrant connection is healthy.
         
         Returns:
@@ -102,7 +101,7 @@ class DocumentVectorStore:
         """
         try:
             # Try to get collection info as a health check
-            self.client.get_collection(collection_name=self.collection_name)
+            await self.client.get_collection(collection_name=self.collection_name)
             logger.debug("Qdrant health check passed")
             return True
             
@@ -116,20 +115,22 @@ class DocumentVectorStore:
             logger.error(f"Qdrant health check failed: {e}")
             return False
     
-    def store_document(self, document: Document) -> None:
-        """Store document embeddings in Qdrant.
+    async def store_document(self, document: Document) -> None:
+        """Store document embeddings in Qdrant using batch processing.
         
         For each page in the document:
         1. Extract text from all text regions
-        2. Generate embedding vector for the page text
-        3. Store as a point with metadata
+        2. Generate embeddings for all pages in a single batch
+        3. Store as points with metadata
         
         Args:
             document: Document instance to store
         """
         logger.info(f"Storing document {document.id} with {len(document.pages)} pages")
         
-        points: List[PointStruct] = []
+        # Step 1: Collect all valid page texts
+        valid_pages: List[Page] = []
+        texts: List[str] = []
         
         for page in document.pages:
             # Extract text from all text regions on the page
@@ -141,31 +142,45 @@ class DocumentVectorStore:
                 )
                 continue
             
-            # Generate embedding for the page text
-            try:
-                # FastEmbed returns a generator, convert to list
-                embeddings = list(self.embedding_model.embed([page_text]))
-                if not embeddings:
-                    logger.warning(
-                        f"Failed to generate embedding for page {page.page_number}"
-                    )
-                    continue
-                
-                embedding_vector = embeddings[0].tolist()
-                
-            except Exception as e:
-                logger.error(
-                    f"Error generating embedding for page {page.page_number}: {e}"
-                )
-                continue
+            valid_pages.append(page)
+            texts.append(page_text)
+        
+        if not texts:
+            logger.warning(f"No valid pages to store for document {document.id}")
+            return
+        
+        # Step 2: Generate all embeddings in one batch (major optimization)
+        logger.debug(f"Generating embeddings for {len(texts)} pages in batch")
+        try:
+            # FastEmbed returns a generator, convert to list
+            # This is the key optimization: one call instead of N calls
+            embeddings = list(self.embedding_model.embed(texts))
             
+            if len(embeddings) != len(valid_pages):
+                logger.error(
+                    f"Embedding count mismatch: {len(embeddings)} embeddings "
+                    f"for {len(valid_pages)} pages"
+                )
+                return
+                
+        except Exception as e:
+            logger.error(f"Error generating batch embeddings: {e}")
+            raise
+        
+        # Step 3: Map embeddings back to pages and create points
+        points: List[PointStruct] = []
+        
+        for page, embedding_vector in zip(valid_pages, embeddings):
             # Create deterministic UUID based on doc_id + page_num
             point_id = str(uuid5(NAMESPACE_DNS, f"{document.id}:{page.page_number}"))
+            
+            # Extract page text for preview
+            page_text = self._extract_page_text(page)
             
             # Create point with metadata
             point = PointStruct(
                 id=point_id,
-                vector=embedding_vector,
+                vector=embedding_vector.tolist(),
                 payload={
                     "doc_id": document.id,
                     "page_num": page.page_number,
@@ -177,22 +192,19 @@ class DocumentVectorStore:
             points.append(point)
         
         # Upload all points to Qdrant
-        if points:
-            try:
-                self.client.upsert(
-                    collection_name=self.collection_name,
-                    points=points
-                )
-                logger.success(
-                    f"Stored {len(points)} page embeddings for document {document.id}"
-                )
-            except Exception as e:
-                logger.error(f"Failed to upsert points to Qdrant: {e}")
-                raise
-        else:
-            logger.warning(f"No valid pages to store for document {document.id}")
+        try:
+            await self.client.upsert(
+                collection_name=self.collection_name,
+                points=points
+            )
+            logger.success(
+                f"Stored {len(points)} page embeddings for document {document.id}"
+            )
+        except Exception as e:
+            logger.error(f"Failed to upsert points to Qdrant: {e}")
+            raise
     
-    def semantic_search(
+    async def semantic_search(
         self, 
         query_text: str, 
         limit: int = 10,
@@ -220,7 +232,7 @@ class DocumentVectorStore:
             query_vector = query_embeddings[0].tolist()
             
             # Perform search
-            search_results = self.client.search(
+            search_results = await self.client.search(
                 collection_name=self.collection_name,
                 query_vector=query_vector,
                 limit=limit,
@@ -245,6 +257,11 @@ class DocumentVectorStore:
             logger.error(f"Semantic search failed: {e}")
             raise
     
+    async def close(self) -> None:
+        """Close the async Qdrant client and cleanup resources."""
+        logger.info("Closing async Qdrant client")
+        await self.client.close()
+    
     def _extract_page_text(self, page: Page) -> str:
         """Extract all text content from a page.
         
@@ -262,3 +279,12 @@ class DocumentVectorStore:
                 text_parts.append(region.content.text)
         
         return " ".join(text_parts)
+    
+    async def __aenter__(self):
+        """Async context manager entry."""
+        await self.ensure_collection_exists()
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit."""
+        await self.close()

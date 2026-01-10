@@ -4,7 +4,7 @@ These tests use mocking to avoid requiring actual Docker/Qdrant running.
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock, MagicMock, AsyncMock, patch
 from uuid import uuid4
 
 from qdrant_client.http.exceptions import UnexpectedResponse
@@ -30,7 +30,7 @@ def mock_config():
         qdrant_host="localhost",
         qdrant_port=6333,
         vector_collection="test_documents",
-        embedding_model="BGE-small-en-v1.5"
+        embedding_model="BAAI/bge-small-en-v1.5"
     )
     return config
 
@@ -86,9 +86,10 @@ def sample_document():
 class TestDocumentVectorStore:
     """Test suite for DocumentVectorStore class."""
     
+    @pytest.mark.asyncio
     @patch('local_body.database.vector_store.TextEmbedding')
-    @patch('local_body.database.vector_store.QdrantClient')
-    def test_health_check_connection_error(
+    @patch('local_body.database.vector_store.AsyncQdrantClient')
+    async def test_health_check_connection_error(
         self, 
         mock_qdrant_client, 
         mock_text_embedding,
@@ -96,7 +97,7 @@ class TestDocumentVectorStore:
     ):
         """Test 1: Health check returns False when connection fails."""
         # Setup mocks
-        mock_client_instance = MagicMock()
+        mock_client_instance = AsyncMock()
         mock_qdrant_client.return_value = mock_client_instance
         
         # Mock get_collections to succeed (for initialization)
@@ -117,7 +118,7 @@ class TestDocumentVectorStore:
         )
         
         # Test health check
-        result = vector_store.check_health()
+        result = await vector_store.check_health()
         
         # Assert
         assert result is False
@@ -125,9 +126,10 @@ class TestDocumentVectorStore:
             collection_name="test_documents"
         )
     
+    @pytest.mark.asyncio
     @patch('local_body.database.vector_store.TextEmbedding')
-    @patch('local_body.database.vector_store.QdrantClient')
-    def test_initialization_creates_collection(
+    @patch('local_body.database.vector_store.AsyncQdrantClient')
+    async def test_initialization_creates_collection(
         self, 
         mock_qdrant_client, 
         mock_text_embedding,
@@ -135,7 +137,7 @@ class TestDocumentVectorStore:
     ):
         """Test 2: Initialization creates collection with size 384."""
         # Setup mocks
-        mock_client_instance = MagicMock()
+        mock_client_instance = AsyncMock()
         mock_qdrant_client.return_value = mock_client_instance
         
         # Mock get_collections to return empty list (collection doesn't exist)
@@ -150,6 +152,9 @@ class TestDocumentVectorStore:
         # Initialize vector store
         vector_store = DocumentVectorStore(mock_config)
         
+        # Call ensure_collection_exists
+        await vector_store.ensure_collection_exists()
+        
         # Assert create_collection was called with correct parameters
         mock_client_instance.create_collection.assert_called_once()
         call_args = mock_client_instance.create_collection.call_args
@@ -161,18 +166,19 @@ class TestDocumentVectorStore:
         vectors_config = call_args.kwargs['vectors_config']
         assert vectors_config.size == 384
     
+    @pytest.mark.asyncio
     @patch('local_body.database.vector_store.TextEmbedding')
-    @patch('local_body.database.vector_store.QdrantClient')
-    def test_store_document_with_correct_payload(
+    @patch('local_body.database.vector_store.AsyncQdrantClient')
+    async def test_store_document_with_batch_embedding(
         self, 
         mock_qdrant_client, 
         mock_text_embedding,
         mock_config,
         sample_document
     ):
-        """Test 3: Document storage creates points with correct payload structure."""
+        """Test 3: Document storage uses batch embedding (1 call for N pages)."""
         # Setup mocks
-        mock_client_instance = MagicMock()
+        mock_client_instance = AsyncMock()
         mock_qdrant_client.return_value = mock_client_instance
         
         # Mock get_collections
@@ -188,19 +194,26 @@ class TestDocumentVectorStore:
         mock_embedding_2 = MagicMock()
         mock_embedding_2.tolist.return_value = [0.2] * 384
         
-        # Return dummy embeddings (384-dimensional) as a generator for each call
-        # Use side_effect to return different values for each call
-        mock_embedding_instance.embed.side_effect = [
-            iter([mock_embedding_1]),  # First page embedding (as generator)
-            iter([mock_embedding_2])   # Second page embedding (as generator)
-        ]
+        # CRITICAL: Return BOTH embeddings in ONE call (batch processing)
+        mock_embedding_instance.embed.return_value = iter([mock_embedding_1, mock_embedding_2])
         mock_text_embedding.return_value = mock_embedding_instance
         
         # Initialize vector store
         vector_store = DocumentVectorStore(mock_config)
         
         # Store document
-        vector_store.store_document(sample_document)
+        await vector_store.store_document(sample_document)
+        
+        # Assert embed was called ONCE with a list of texts (batch processing)
+        mock_embedding_instance.embed.assert_called_once()
+        call_args = mock_embedding_instance.embed.call_args
+        texts = call_args[0][0]
+        
+        # Verify it was called with a list containing both page texts
+        assert isinstance(texts, list)
+        assert len(texts) == 2
+        assert "This is page one content." in texts[0]
+        assert "This is page two content." in texts[1]
         
         # Assert upsert was called
         mock_client_instance.upsert.assert_called_once()
@@ -225,9 +238,10 @@ class TestDocumentVectorStore:
         assert second_point.payload['doc_id'] == sample_document.id
         assert second_point.payload['page_num'] == 2
     
+    @pytest.mark.asyncio
     @patch('local_body.database.vector_store.TextEmbedding')
-    @patch('local_body.database.vector_store.QdrantClient')
-    def test_health_check_success(
+    @patch('local_body.database.vector_store.AsyncQdrantClient')
+    async def test_health_check_success(
         self, 
         mock_qdrant_client, 
         mock_text_embedding,
@@ -235,7 +249,7 @@ class TestDocumentVectorStore:
     ):
         """Test: Health check returns True when connection succeeds."""
         # Setup mocks
-        mock_client_instance = MagicMock()
+        mock_client_instance = AsyncMock()
         mock_qdrant_client.return_value = mock_client_instance
         
         # Mock get_collections
@@ -254,14 +268,15 @@ class TestDocumentVectorStore:
         mock_client_instance.get_collection.return_value = MagicMock()
         
         # Test health check
-        result = vector_store.check_health()
+        result = await vector_store.check_health()
         
         # Assert
         assert result is True
     
+    @pytest.mark.asyncio
     @patch('local_body.database.vector_store.TextEmbedding')
-    @patch('local_body.database.vector_store.QdrantClient')
-    def test_semantic_search(
+    @patch('local_body.database.vector_store.AsyncQdrantClient')
+    async def test_semantic_search(
         self, 
         mock_qdrant_client, 
         mock_text_embedding,
@@ -269,7 +284,7 @@ class TestDocumentVectorStore:
     ):
         """Test: Semantic search returns formatted results."""
         # Setup mocks
-        mock_client_instance = MagicMock()
+        mock_client_instance = AsyncMock()
         mock_qdrant_client.return_value = mock_client_instance
         
         # Mock get_collections
@@ -300,7 +315,7 @@ class TestDocumentVectorStore:
         mock_client_instance.search.return_value = [mock_hit]
         
         # Perform search
-        results = vector_store.semantic_search("test query", limit=5)
+        results = await vector_store.semantic_search("test query", limit=5)
         
         # Assert
         assert len(results) == 1

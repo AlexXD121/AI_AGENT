@@ -10,6 +10,8 @@ from typing import List, Dict, Any, Optional
 import httpx
 from loguru import logger
 
+from local_body.core.config_manager import SystemConfig
+
 
 class ModelManager:
     """Manager for Ollama local AI models.
@@ -21,15 +23,14 @@ class ModelManager:
     - Model status monitoring
     """
     
-    # Required models for Sovereign-Doc
-    REQUIRED_MODELS = ["llama3.2", "llama3.2-vision"]
-    
-    def __init__(self, base_url: str = "http://localhost:11434"):
+    def __init__(self, config: SystemConfig, base_url: str = "http://localhost:11434"):
         """Initialize the model manager.
         
         Args:
+            config: SystemConfig instance with model configuration
             base_url: Base URL for Ollama API (default: http://localhost:11434)
         """
+        self.config = config
         self.base_url = base_url
         self.client = httpx.AsyncClient(timeout=300.0)  # 5 min timeout for large models
     
@@ -91,7 +92,7 @@ class ModelManager:
         
         # Determine which models need to be pulled
         missing_models = [
-            model for model in self.REQUIRED_MODELS 
+            model for model in self.config.required_ollama_models 
             if model not in installed_models
         ]
         
@@ -195,7 +196,7 @@ class ModelManager:
             True if all models were unloaded successfully
         """
         if models is None:
-            models = self.REQUIRED_MODELS
+            models = self.config.required_ollama_models
         
         logger.info(f"Unloading models from memory: {models}")
         
