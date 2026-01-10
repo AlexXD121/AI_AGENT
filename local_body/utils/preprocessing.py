@@ -216,3 +216,75 @@ class ImagePreprocessor:
         logger.debug(f"Preprocessing complete. Output size: {len(result_bytes)} bytes")
         
         return result_bytes
+    
+    def assess_image_quality(self, image: np.ndarray) -> dict:
+        """Assess image quality for OCR readiness.
+        
+        Uses Variance of Laplacian for blur detection and
+        standard deviation for contrast assessment.
+        
+        Args:
+            image: Input image as numpy array
+            
+        Returns:
+            Dictionary with quality metrics:
+            - blur_score: Variance of Laplacian (higher = sharper)
+            - is_blurry: True if blur_score < 100
+            - contrast: Standard deviation of pixel intensities
+            - is_low_contrast: True if contrast < 30
+        """
+        # Ensure grayscale
+        if len(image.shape) == 3:
+            image = self.to_grayscale(image)
+        
+        # Blur detection: Variance of Laplacian
+        # High variance = sharp edges, Low variance = blurry
+        laplacian = cv2.Laplacian(image, cv2.CV_64F)
+        blur_score = laplacian.var()
+        is_blurry = blur_score < 100.0
+        
+        # Contrast detection: Standard deviation
+        contrast = float(np.std(image))
+        is_low_contrast = contrast < 30.0
+        
+        logger.debug(
+            f"Image quality: blur_score={blur_score:.1f} (blurry={is_blurry}), "
+            f"contrast={contrast:.1f} (low={is_low_contrast})"
+        )
+        
+        return {
+            'blur_score': float(blur_score),
+            'is_blurry': is_blurry,
+            'contrast': contrast,
+            'is_low_contrast': is_low_contrast
+        }
+    
+    def sharpen(
+        self, 
+        image: np.ndarray, 
+        strength: float = 1.0
+    ) -> np.ndarray:
+        """Sharpen image using unsharp mask technique.
+        
+        This enhances edges and details which can improve OCR accuracy
+        on slightly blurry images.
+        
+        Args:
+            image: Input image as numpy array
+            strength: Sharpening strength (0.0 to 2.0, default 1.0)
+            
+        Returns:
+            Sharpened image
+        """
+        # Ensure strength is in valid range
+        strength = max(0.0, min(2.0, strength))
+        
+        # Create Gaussian blur (the "mask" in unsharp mask)
+        blurred = cv2.GaussianBlur(image, (0, 0), 3.0)
+        
+        # Unsharp mask: original + strength * (original - blurred)
+        sharpened = cv2.addWeighted(image, 1.0 + strength, blurred, -strength, 0)
+        
+        logger.debug(f"Applied sharpening with strength={strength:.1f}")
+        return sharpened
+

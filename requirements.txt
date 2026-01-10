@@ -21,6 +21,17 @@ pypdf>=3.17.0
 Pillow>=10.0.0
 numpy>=1.24.0
 
+# Computer Vision / Layout Analysis
+ultralytics>=8.0.0  # YOLOv8 for document layout detection
+
+# OCR (Optical Character Recognition)
+paddleocr>=2.7.0  # Text and table extraction
+paddlepaddle>=2.5.0  # PaddleOCR backend (CPU version)
+
+# Transformer Models (for TrOCR handwriting fallback)
+transformers>=4.35.0  # TrOCR model
+torch>=2.0.0  # PyTorch backend (CPU version)
+
 # Vector Database and Embeddings
 # Note: fastembed requires Python <3.13 due to onnxruntime dependency
 # For Python 3.14+, these should be installed in a compatible environment
