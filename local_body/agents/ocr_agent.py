@@ -87,7 +87,7 @@ class OCRAgent(BaseAgent):
         lang = self.get_config("lang", "en")
         use_angle_cls = self.get_config("use_angle_cls", True)
         try:
-            self.ocr = PaddleOCR(use_angle_cls=use_angle_cls, lang=lang, show_log=False)
+            self.ocr = PaddleOCR(use_angle_cls=use_angle_cls, lang=lang)
             logger.success(f"PaddleOCR loaded (lang={lang})")
         except Exception as e:
             logger.error(f"Failed to load PaddleOCR: {e}")

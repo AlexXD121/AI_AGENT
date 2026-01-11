@@ -1,36 +1,29 @@
-# Test environment Dockerfile for Sovereign-Doc
-# Uses Python 3.12 for compatibility with fastembed/onnxruntime
+# Optimized Test Dockerfile with Layer Caching
+# Build time: <60 seconds (dependencies cached)
 
 FROM python:3.12-slim
 
-# Set working directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+# Layer 1: System dependencies (rarely changes - cached)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    poppler-utils \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
-    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements file
-COPY requirements.txt .
+# Layer 2: Python dependencies (changes rarely - cached)
+# CRITICAL: Copy requirements FIRST, before code
+# Docker checks file checksum - if unchanged, skips reinstall
+COPY tests/requirements-test.txt /app/requirements.txt
 
-# Install Python dependencies
+# Layer 3: Install Python packages (cached if requirements unchanged)
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install fastembed (not in requirements.txt due to Python 3.14 incompatibility)
-RUN pip install --no-cache-dir fastembed>=0.2.0
+# Layer 4: Copy application code (changes often, but fast)
+# This layer rebuilds quickly when code changes
+COPY . /app
 
-# Install pytest and async support
-RUN pip install --no-cache-dir pytest>=8.0.0 pytest-asyncio>=0.23.0
+# Set Python path for imports
+ENV PYTHONPATH=/app
 
-# Copy project files (will be mounted at runtime)
-# COPY . .
-
-# Default command runs pytest
+# Default command
 CMD ["pytest", "tests/", "-v"]

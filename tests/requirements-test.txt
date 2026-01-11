@@ -1,0 +1,46 @@
+# Lightweight Test Requirements (No Heavy AI/GPU Libraries)
+# This file is used in Docker test environment for fast builds
+
+# Core Testing
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+
+# FastAPI Testing
+fastapi>=0.100.0
+uvicorn>=0.20.0
+python-multipart
+httpx
+
+# Core Dependencies
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+loguru>=0.7.0
+PyYAML>=6.0
+psutil>=5.9.0
+
+# Computer Vision (CPU only, required for imports)
+opencv-python-headless>=4.8.0
+
+# Document Processing (lightweight)
+pdf2image>=1.16.0
+pypdf>=3.17.0
+
+# Vector Database and Embeddings
+qdrant-client>=1.7.0
+fastembed>=0.2.0  # Works in Python 3.12 Docker
+
+# Basic Data Processing
+numpy>=1.24.0
+Pillow>=10.0.0
+
+# Tunneling (lightweight)
+pyngrok>=7.0.0
+
+# Vision & OCR (Required for Task 4 Verification)
+ultralytics>=8.0.0
+paddleocr>=2.7.0
+paddlepaddle>=2.6.0
+
+# Note: Heavy AI libraries excluded from test environment:
+# - transformers, torch (TrOCR - will be mocked)
+# - vllm (Cloud Brain - will be mocked)

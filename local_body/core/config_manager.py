@@ -102,7 +102,7 @@ class SystemConfig(BaseModel):
         description="Qdrant collection name for document vectors"
     )
     embedding_model: str = Field(
-        default="BAAI/bge-small-en-v1.5",
+        default="BAAI/bge-small-en-v1.5",  # Full HuggingFace repo ID for fastembed
         description="Embedding model for text vectorization"
     )
     qdrant_host: str = Field(

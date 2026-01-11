@@ -1,0 +1,236 @@
+"""Vision inference agent for remote and local image analysis.
+
+This agent sends images to the Cloud Brain (Colab) for vision-language analysis
+with caching, retry logic, and local fallback capabilities.
+"""
+
+import hashlib
+import httpx
+from typing import Dict, Any, Optional
+from loguru import logger
+
+from local_body.agents.base import BaseAgent
+from local_body.core.datamodels import Document
+from local_body.tunnel.secure_tunnel import SecureTunnel
+
+
+class VisionAgent(BaseAgent):
+    """Vision inference agent with remote Cloud Brain and local fallback.
+    
+    Features:
+    - Remote inference via Cloud Brain (Colab)
+    - In-memory caching for efficiency
+    - Automatic retry with timeout handling
+    - Local Ollama fallback on connection failure
+    
+    Requirements:
+    - Req 3.4: Deep document analysis
+    - Req 15.3: Hybrid cloud-local fallback
+    - Req 2.5: Result caching
+    """
+    
+    def __init__(self, config: Dict[str, Any], tunnel: SecureTunnel):
+        """Initialize vision agent.
+        
+        Args:
+            config: System configuration
+            tunnel: SecureTunnel instance for Cloud Brain connectivity
+        """
+        super().__init__(agent_type="vision", config=config)
+        
+        self.tunnel = tunnel
+        self._cache: Dict[str, str] = {}
+        
+        # Configuration
+        self.max_retries = self.get_config("max_retries", 3)
+        self.timeout = self.get_config("timeout", 30)
+        self.enable_cache = self.get_config("enable_cache", True)
+        self.fallback_model = self.get_config("fallback_model", "llama3.2-vision")
+        
+        logger.info(f"VisionAgent initialized (retries={self.max_retries}, timeout={self.timeout}s)")
+    
+    async def process(self, document: Document) -> Document:
+        """Process document with vision analysis.
+        
+        Args:
+            document: Document to analyze
+            
+        Returns:
+            Document with vision summaries added
+        """
+        logger.info(f"Processing document {document.id} with vision analysis")
+        
+        for page_idx, page in enumerate(document.pages):
+            if not page.raw_image_bytes:
+                logger.warning(f"Page {page_idx} has no image bytes, skipping")
+                continue
+            
+            try:
+                # Standard vision prompt
+                query = "Describe this document structure and content in detail."
+                
+                # Try remote inference first
+                try:
+                    result = await self.analyze_image_remote(
+                        page.raw_image_bytes,
+                        query
+                    )
+                    logger.debug(f"Page {page_idx}: Remote analysis success")
+                    
+                except (httpx.ConnectError, httpx.TimeoutException, ConnectionError) as e:
+                    logger.warning(f"Cloud Brain unreachable: {e}. Falling back to local model.")
+                    result = await self._analyze_local(page.raw_image_bytes, query)
+                    logger.debug(f"Page {page_idx}: Local fallback used")
+                
+                # Store result in page metadata
+                if not page.metadata:
+                    page.metadata = {}
+                page.metadata['vision_summary'] = result
+                
+            except Exception as e:
+                logger.error(f"Page {page_idx} vision analysis failed: {e}")
+                if not page.metadata:
+                    page.metadata = {}
+                page.metadata['vision_summary'] = f"ERROR: {str(e)}"
+        
+        return document
+    
+    async def analyze_image_remote(
+        self,
+        image_bytes: bytes,
+        query: str
+    ) -> str:
+        """Analyze image using remote Cloud Brain.
+        
+        Args:
+            image_bytes: Image data
+            query: Analysis query
+            
+        Returns:
+            Analysis result text
+            
+        Raises:
+            ConnectionError: If Cloud Brain is unreachable
+            httpx.TimeoutException: If request times out
+        """
+        # Check cache first
+        if self.enable_cache:
+            cache_key = self._generate_cache_key(image_bytes, query)
+            if cache_key in self._cache:
+                logger.debug("Cache hit - returning cached result")
+                return self._cache[cache_key]
+        
+        # Get tunnel URL
+        status = self.tunnel.get_status()
+        if not status['active'] or not status['public_url']:
+            raise ConnectionError("Cloud Brain tunnel not active")
+        
+        public_url = status['public_url']
+        endpoint = f"{public_url}/analyze"
+        
+        # Send request with retry
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            for attempt in range(self.max_retries):
+                try:
+                    logger.debug(f"Sending request to {endpoint} (attempt {attempt+1}/{self.max_retries})")
+                    
+                    # Prepare multipart request
+                    files = {'file': ('image.jpg', image_bytes, 'image/jpeg')}
+                    data = {'query': query}
+                    
+                    response = await client.post(endpoint, files=files, data=data)
+                    response.raise_for_status()
+                    
+                    # Extract result
+                    result_data = response.json()
+                    result = result_data.get('response', '')
+                    
+                    # Cache result
+                    if self.enable_cache:
+                        self._cache[cache_key] = result
+                    
+                    logger.success(f"Remote analysis successful ({len(result)} chars)")
+                    return result
+                    
+                except httpx.HTTPStatusError as e:
+                    logger.error(f"HTTP error {e.response.status_code}: {e}")
+                    if attempt == self.max_retries - 1:
+                        raise
+                    
+                except (httpx.ConnectError, httpx.TimeoutException) as e:
+                    logger.warning(f"Connection attempt {attempt+1} failed: {e}")
+                    if attempt == self.max_retries - 1:
+                        raise
+        
+        raise ConnectionError("All retry attempts failed")
+    
+    async def _analyze_local(self, image_bytes: bytes, query: str) -> str:
+        """Fallback to local Ollama vision model.
+        
+        Args:
+            image_bytes: Image data
+            query: Analysis query
+            
+        Returns:
+            Local analysis result
+        """
+        try:
+            # Use Ollama API for local vision
+            logger.info(f"Using local fallback model: {self.fallback_model}")
+            
+            # Encode image to base64
+            import base64
+            image_b64 = base64.b64encode(image_bytes).decode()
+            
+            # Call Ollama API
+            async with httpx.AsyncClient(timeout=60) as client:
+                response = await client.post(
+                    "http://localhost:11434/api/generate",
+                    json={
+                        "model": self.fallback_model,
+                        "prompt": query,
+                        "images": [image_b64],
+                        "stream": False
+                    }
+                )
+                response.raise_for_status()
+                
+                result = response.json().get('response', '')
+                logger.success(f"Local analysis successful ({len(result)} chars)")
+                return result
+                
+        except Exception as e:
+            logger.error(f"Local fallback failed: {e}")
+            return f"LOCAL_FALLBACK_ERROR: {str(e)}"
+    
+    def _generate_cache_key(self, image_bytes: bytes, query: str) -> str:
+        """Generate MD5 cache key for image+query pair.
+        
+        Args:
+            image_bytes: Image data
+            query: Query text
+            
+        Returns:
+            MD5 hash string
+        """
+        hasher = hashlib.md5()
+        hasher.update(image_bytes)
+        hasher.update(query.encode())
+        return hasher.hexdigest()
+    
+    def clear_cache(self):
+        """Clear the inference cache."""
+        self._cache.clear()
+        logger.info("Vision inference cache cleared")
+    
+    def get_cache_stats(self) -> Dict[str, int]:
+        """Get cache statistics.
+        
+        Returns:
+            Dictionary with cache metrics
+        """
+        return {
+            'entries': len(self._cache),
+            'hits': getattr(self, '_cache_hits', 0),
+            'misses': getattr(self, '_cache_misses', 0)
+        }
