@@ -77,10 +77,11 @@ def layout_node(state: DocumentProcessingState) -> Dict[str, Any]:
         }
         
     except Exception as e:
-        logger.error(f"Layout node failed: {e}")
+        logger.error(f"Layout node failed: {e}", exc_info=True)
+        error_msg = f"Layout failed: {str(e)}"
         return {
             'processing_stage': ProcessingStage.FAILED,
-            'error_log': state.get('error_log', []) + [f"Layout failed: {str(e)}"]
+            'error_log': [error_msg]
         }
 
 
@@ -124,10 +125,11 @@ def ocr_node(state: DocumentProcessingState) -> Dict[str, Any]:
         }
         
     except Exception as e:
-        logger.error(f"OCR node failed: {e}")
+        logger.error(f"OCR node failed: {e}", exc_info=True)
+        error_msg = f"OCR failed: {str(e)}"
         return {
-            'processing_stage': ProcessingStage.FAILED,
-            'error_log': state.get('error_log', []) + [f"OCR failed: {str(e)}"]
+            'ocr_results': {},
+            'error_log': [error_msg]
         }
 
 
@@ -169,10 +171,11 @@ def vision_node(state: DocumentProcessingState) -> Dict[str, Any]:
         }
         
     except Exception as e:
-        logger.error(f"Vision node failed: {e}")
+        logger.error(f"Vision node failed: {e}", exc_info=True)
+        error_msg = f"Vision failed: {str(e)}"
         return {
-            'processing_stage': ProcessingStage.FAILED,
-            'error_log': state.get('error_log', []) + [f"Vision failed: {str(e)}"]
+            'vision_results': {},
+            'error_log': [error_msg]
         }
 
 
@@ -197,10 +200,15 @@ def validation_node(state: DocumentProcessingState) -> Dict[str, Any]:
         # Get agent
         agent = _get_agent("validation", config.model_dump())
         
+        # Gracefully handle missing inputs
+        vision_results = state.get('vision_results', {})
+        if not vision_results:
+            logger.warning("No vision results available for validation - skipping conflict detection")
+        
         # Validate document
         conflicts = agent.validate(
             state['document'],
-            state.get('vision_results', {})
+            vision_results
         )
         
         logger.success(f"Validation complete: {len(conflicts)} conflicts detected")
@@ -217,8 +225,11 @@ def validation_node(state: DocumentProcessingState) -> Dict[str, Any]:
         }
         
     except Exception as e:
-        logger.error(f"Validation node failed: {e}")
+        logger.error(f"Validation node failed: {e}", exc_info=True)
+        error_msg = f"Validation failed: {str(e)}"
+        # Return empty conflicts list to allow workflow to continue
         return {
-            'processing_stage': ProcessingStage.FAILED,
-            'error_log': state.get('error_log', []) + [f"Validation failed: {str(e)}"]
+            'conflicts': [],
+            'processing_stage': ProcessingStage.COMPLETE,
+            'error_log': [error_msg]
         }

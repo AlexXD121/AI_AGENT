@@ -82,7 +82,7 @@ async def analyze(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/shutdown")
+@app.post("/shutdown", dependencies=[Depends(verify_api_key)])
 async def shutdown():
     """Shutdown server (for Colab cleanup)"""
     logger.warning("Shutdown requested")

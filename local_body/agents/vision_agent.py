@@ -7,6 +7,8 @@ with caching, retry logic, and local fallback capabilities.
 import hashlib
 import httpx
 from typing import Dict, Any, Optional
+from io import BytesIO
+from PIL import Image
 from loguru import logger
 
 from local_body.agents.base import BaseAgent
@@ -46,6 +48,11 @@ class VisionAgent(BaseAgent):
         self.timeout = self.get_config("timeout", 30)
         self.enable_cache = self.get_config("enable_cache", True)
         self.fallback_model = self.get_config("fallback_model", "llama3.2-vision")
+        
+        # Image compression settings
+        self.api_key = self.get_config("brain_secret", "sovereign-secret-key")
+        self.max_image_size = 1024
+        self.jpeg_quality = 85
         
         logger.info(f"VisionAgent initialized (retries={self.max_retries}, timeout={self.timeout}s)")
     
@@ -95,6 +102,60 @@ class VisionAgent(BaseAgent):
         
         return document
     
+    def _compress_image(self, image_bytes: bytes) -> bytes:
+        """Compress image to reduce transfer size.
+        
+        - Resize to max 1024px (maintaining aspect ratio)
+        - Convert to RGB if needed
+        - Save as JPEG with 85% quality
+        
+        Args:
+            image_bytes: Original image bytes
+            
+        Returns:
+            Compressed image bytes
+        """
+        try:
+            # Load image
+            img = Image.open(BytesIO(image_bytes))
+            
+            # Resize if needed
+            if img.width > self.max_image_size or img.height > self.max_image_size:
+                # Calculate new dimensions maintaining aspect ratio
+                if img.width > img.height:
+                    new_width = self.max_image_size
+                    new_height = int(img.height * (self.max_image_size / img.width))
+                else:
+                    new_height = self.max_image_size
+                    new_width = int(img.width * (self.max_image_size / img.height))
+                
+                img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                logger.debug(f"Resized image from {image_bytes.__len__()} to {new_width}x{new_height}")
+            
+            # Convert RGBA to RGB if needed
+            if img.mode in ('RGBA', 'LA', 'P'):
+                background = Image.new('RGB', img.size, (255, 255, 255))
+                if img.mode == 'P':
+                    img = img.convert('RGBA')
+                background.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
+                img = background
+            elif img.mode != 'RGB':
+                img = img.convert('RGB')
+            
+            # Compress to JPEG
+            output = BytesIO()
+            img.save(output, format='JPEG', quality=self.jpeg_quality, optimize=True)
+            compressed_bytes = output.getvalue()
+            
+            reduction = (1 - len(compressed_bytes) / len(image_bytes)) * 100
+            logger.debug(f"Compressed image: {len(image_bytes)} → {len(compressed_bytes)} bytes ({reduction:.1f}% reduction)")
+            
+            return compressed_bytes
+            
+        except Exception as e:
+            logger.warning(f"Image compression failed: {e}. Using original image.")
+            return image_bytes
+    
     async def analyze_image_remote(
         self,
         image_bytes: bytes,
@@ -134,11 +195,15 @@ class VisionAgent(BaseAgent):
                 try:
                     logger.debug(f"Sending request to {endpoint} (attempt {attempt+1}/{self.max_retries})")
                     
-                    # Prepare multipart request
-                    files = {'file': ('image.jpg', image_bytes, 'image/jpeg')}
-                    data = {'query': query}
+                    # Compress image before sending
+                    compressed_bytes = self._compress_image(image_bytes)
                     
-                    response = await client.post(endpoint, files=files, data=data)
+                    # Prepare multipart request with API key auth
+                    files = {'file': ('image.jpg', compressed_bytes, 'image/jpeg')}
+                    data = {'query': query}
+                    headers = {'Authorization': f'Bearer {self.api_key}'}
+                    
+                    response = await client.post(endpoint, files=files, data=data, headers=headers)
                     response.raise_for_status()
                     
                     # Extract result
