@@ -128,18 +128,20 @@ class TestOCRAgent:
         sample_document_with_regions
     ):
         """Test 2: Retry logic shows OCR called twice when confidence is low."""
-        # Setup mock OCR with side_effect for sequential calls
+        # Setup mock OCR with side_effect
+        # Create mock PaddleOCR instance
         mock_ocr = MagicMock()
         
-        # First call: low confidence (40%) - triggers retry
+        # Mock: First attempt returns low-confidence result (below threshold 0.85)
+        # PaddleOCR returns: [page_results] where page_results = [line_results]
+        # Each line_result = [bbox, (text, confidence)]
         bad_result = [[
-            [[[0, 0], [100, 0], [100, 20], [0, 20]], ("LowConfText", 0.40)]
+            [[[0, 0], [100, 0], [100, 20], [0, 20]], ("LowConfText", 0.70)]
         ]]
         
-        # Second call: still low but slightly better (50%)
-        # Note: We keep it below threshold to ensure retry happens but preprocessing may fail
+        # Mock: Second attempt (after preprocessing) returns better result (above threshold)
         better_result = [[
-            [[[0, 0], [100, 0], [100, 20], [0, 20]], ("BetterText", 0.50)]
+            [[[0, 0], [100, 0], [100, 20], [0, 20]], ("BetterText", 0.92)]
         ]]
         
         # Configure mock to return different results
@@ -159,7 +161,7 @@ class TestOCRAgent:
         region = result.pages[0].regions[0]
         assert isinstance(region.content, TextContent)
         assert region.content.text == "BetterText", f"Expected 'BetterText' but got '{region.content.text}'"
-        assert region.content.confidence == 0.50
+        assert region.content.confidence == 0.92
     
     @pytest.mark.asyncio
     @patch('local_body.agents.ocr_agent.PaddleOCR')

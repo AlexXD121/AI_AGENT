@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_serializer, field_validator
 
 
 class BoundingBox(BaseModel):
@@ -91,18 +91,35 @@ class Page(BaseModel):
     """Represents a single page in a document."""
     
     page_number: int = Field(..., ge=1, description="Page number (1-indexed)")
-    regions: List[Region] = Field(default_factory=list, description="Detected regions on page")
-    raw_image_bytes: Optional[bytes] = Field(
-        default=None, 
-        description="Raw page image data"
-    )
+    regions: List[Region] = Field(default_factory=list, description="Detected regions on this page")
+    raw_image_bytes: Optional[bytes] = Field(default=None, description="Original page image as bytes")
     processed_image_bytes: Optional[bytes] = Field(
         default=None, 
-        description="Preprocessed page image data"
+        description="Optional preprocessed image (denoised, binarized)"
+    )
+    metadata: Optional[Dict[str, Any]] = Field(
+        default=None, 
+        description="Additional page-level metadata"
     )
     
-    class Config:
-        arbitrary_types_allowed = True
+    @field_serializer('raw_image_bytes', 'processed_image_bytes', when_used='json')
+    def serialize_bytes_as_base64(self, value: Optional[bytes]) -> Optional[str]:
+        """Serialize bytes fields as base64 strings for JSON compatibility."""
+        if value is None:
+            return None
+        import base64
+        return base64.b64encode(value).decode('ascii')
+    
+    @field_validator('raw_image_bytes', 'processed_image_bytes', mode='before')
+    @classmethod
+    def deserialize_base64_to_bytes(cls, value: Union[str, bytes, None]) -> Optional[bytes]:
+        """Deserialize base64 strings back to bytes when loading from JSON."""
+        if value is None or isinstance(value, bytes):
+            return value
+        if isinstance(value, str):
+            import base64
+            return base64.b64decode(value)
+        return value
 
 
 class DocumentMetadata(BaseModel):

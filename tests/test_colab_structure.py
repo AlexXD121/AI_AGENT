@@ -26,7 +26,13 @@ mock_vllm.LLM = mock_llm_class
 mock_vllm.SamplingParams = MagicMock()
 
 # ========================================
-# STEP 2: Now safe to import app modules
+# STEP 2: Set environment variables for testing
+# ========================================
+import os
+os.environ['BRAIN_SECRET'] = 'test-secret-key'
+
+# ========================================
+# STEP 3: Now safe to import app modules
 # ========================================
 from fastapi.testclient import TestClient
 from colab_brain.server import app
@@ -73,11 +79,12 @@ class TestCloudBrainAPI:
             test_image.save(buffer, format='JPEG')
             buffer.seek(0)
             
-            # Send POST request
+            # Send POST request with API key
             files = {'file': ('test.jpg', buffer, 'image/jpeg')}
             data = {'query': 'What is in this image?'}
+            headers = {'Authorization': 'Bearer test-secret-key'}
             
-            response = client.post("/analyze", files=files, data=data)
+            response = client.post("/analyze", files=files, data=data, headers=headers)
             
             assert response.status_code == 200
             result = response.json()
@@ -88,7 +95,8 @@ class TestCloudBrainAPI:
         """Test 4: /analyze validates required fields"""
         # Missing file
         data = {'query': 'test'}
-        response = client.post("/analyze", data=data)
+        headers = {'Authorization': 'Bearer test-secret-key'}
+        response = client.post("/analyze", data=data, headers=headers)
         
         # Should fail validation
         assert response.status_code == 422
@@ -102,7 +110,8 @@ class TestCloudBrainAPI:
         buffer.seek(0)
         
         files = {'file': ('test.png', buffer, 'image/png')}
-        response = client.post("/analyze", files=files)
+        headers = {'Authorization': 'Bearer test-secret-key'}
+        response = client.post("/analyze", files=files, headers=headers)
         
         # Should fail validation
         assert response.status_code == 422

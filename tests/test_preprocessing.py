@@ -228,7 +228,8 @@ class TestDocumentLoader:
             temp_pdf.unlink()
     
     @patch('local_body.utils.document_loader.PdfReader')
-    def test_load_document_corrupted_pdf(self, mock_pdf_reader):
+    @patch('local_body.utils.document_loader.convert_from_path')
+    def test_load_document_corrupted_pdf(self, mock_convert, mock_pdf_reader):
         """Test: DocumentLoadError raised for corrupted PDF."""
         # Create a temporary corrupted PDF
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
@@ -236,9 +237,14 @@ class TestDocumentLoader:
             f.write(b"corrupted data")
         
         try:
-            # Mock PdfReader to raise PdfReadError
+            # Mock PdfReader to raise PdfReadError when instantiated
             from pypdf.errors import PdfReadError
-            mock_pdf_reader.side_effect = PdfReadError("Invalid PDF")
+            
+            # Create a mock that raises exception when called
+            def raise_pdf_error(*args, **kwargs):
+                raise PdfReadError("Invalid PDF structure")
+            
+            mock_pdf_reader.side_effect = raise_pdf_error
             
             loader = DocumentLoader()
             

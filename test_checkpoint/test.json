@@ -1,0 +1,25 @@
+{
+  "document": {
+    "id": "test",
+    "file_path": "/tmp/test.pdf",
+    "pages": [],
+    "metadata": {
+      "title": null,
+      "author": null,
+      "created_date": "2026-01-11T10:24:40.095254",
+      "page_count": 1,
+      "file_size_bytes": 100,
+      "document_type": null
+    },
+    "processing_status": "pending",
+    "created_at": "2026-01-11T10:24:40.095254"
+  },
+  "file_path": "/tmp/test.pdf",
+  "processing_stage": "TEST",
+  "layout_regions": [],
+  "ocr_results": {},
+  "vision_results": {},
+  "conflicts": [],
+  "resolutions": [],
+  "error_log": []
+}

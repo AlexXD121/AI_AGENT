@@ -1,10 +1,9 @@
 """LangGraph workflow nodes for document processing pipeline.
 
-This module provides node functions that wrap processing agents
+This module provides async node functions that wrap processing agents
 and integrate them into the LangGraph workflow state machine.
 """
 
-import asyncio
 from typing import Dict, Any
 from loguru import logger
 
@@ -16,12 +15,20 @@ from local_body.orchestration.state import DocumentProcessingState, ProcessingSt
 from local_body.core.config_manager import ConfigManager
 
 
-# Global agent instances (singleton pattern for efficiency)
+# Agent singleton cache
 _agents: Dict[str, Any] = {}
 
 
 def _get_agent(agent_type: str, config: Dict[str, Any]):
-    """Get or create agent instance (singleton pattern)."""
+    """Get or create agent instance (singleton pattern).
+    
+    Args:
+        agent_type: Type of agent ('layout', 'ocr', 'vision', 'validation')
+        config: Configuration dict
+        
+    Returns:
+        Agent instance
+    """
     if agent_type not in _agents:
         if agent_type == "layout":
             _agents[agent_type] = LayoutAgent(config)
@@ -35,11 +42,15 @@ def _get_agent(agent_type: str, config: Dict[str, Any]):
             _agents[agent_type] = VisionAgent(config, tunnel)
         elif agent_type == "validation":
             _agents[agent_type] = ValidationAgent(config)
+        else:
+            raise ValueError(f"Unknown agent type: {agent_type}")
     
     return _agents[agent_type]
 
 
-def layout_node(state: DocumentProcessingState) -> Dict[str, Any]:
+# ==================== ASYNC WORKFLOW NODES ====================
+
+async def layout_node(state: DocumentProcessingState) -> Dict[str, Any]:
     """Process document with layout detection (YOLOv8).
     
     Detects regions (text, tables, images, charts) in document pages.
@@ -60,8 +71,8 @@ def layout_node(state: DocumentProcessingState) -> Dict[str, Any]:
         # Get agent
         agent = _get_agent("layout", config.model_dump())
         
-        # Process document (modifies document.pages[].regions in place)
-        document = asyncio.run(agent.process(state['document']))
+        # FIXED: Direct await instead of asyncio.run()
+        document = await agent.process(state['document'])
         
         # Extract all regions from all pages
         all_regions = []
@@ -85,10 +96,8 @@ def layout_node(state: DocumentProcessingState) -> Dict[str, Any]:
         }
 
 
-def ocr_node(state: DocumentProcessingState) -> Dict[str, Any]:
-    """Process document with OCR text extraction (PaddleOCR).
-    
-    Extracts text from detected regions.
+async def ocr_node(state: DocumentProcessingState) -> Dict[str, Any]:
+    """Extract text via OCR (PaddleOCR).
     
     Args:
         state: Current processing state
@@ -106,18 +115,18 @@ def ocr_node(state: DocumentProcessingState) -> Dict[str, Any]:
         # Get agent
         agent = _get_agent("ocr", config.model_dump())
         
-        # Process document (modifies region.content in place)
-        document = asyncio.run(agent.process(state['document']))
+        # FIXED: Direct await instead of asyncio.run()
+        document = await agent.process(state['document'])
         
-        # Extract OCR results
+        # Extract OCR results from regions
         ocr_results = {}
         for page_idx, page in enumerate(document.pages):
             for region_idx, region in enumerate(page.regions):
-                if hasattr(region.content, 'text'):
+                if hasattr(region.content, 'text') and region.content.text:
                     key = f"page_{page_idx}_region_{region_idx}"
                     ocr_results[key] = region.content.text
         
-        logger.success(f"OCR extraction complete: {len(ocr_results)} text regions")
+        logger.success(f"OCR complete: extracted text from {len(ocr_results)} regions")
         
         return {
             'document': document,
@@ -126,17 +135,14 @@ def ocr_node(state: DocumentProcessingState) -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"OCR node failed: {e}", exc_info=True)
-        error_msg = f"OCR failed: {str(e)}"
         return {
             'ocr_results': {},
-            'error_log': [error_msg]
+            'error_log': [f"OCR failed: {str(e)}"]
         }
 
 
-def vision_node(state: DocumentProcessingState) -> Dict[str, Any]:
-    """Process document with vision analysis (remote Cloud Brain).
-    
-    Analyzes images and charts using vision model.
+async def vision_node(state: DocumentProcessingState) -> Dict[str, Any]:
+    """Analyze images with vision model.
     
     Args:
         state: Current processing state
@@ -154,16 +160,16 @@ def vision_node(state: DocumentProcessingState) -> Dict[str, Any]:
         # Get agent
         agent = _get_agent("vision", config.model_dump())
         
-        # Process document (adds vision_summary to page metadata)
-        document = asyncio.run(agent.process(state['document']))
+        # FIXED: Direct await instead of asyncio.run()
+        document = await agent.process(state['document'])
         
-        # Extract vision results
+        # Extract vision results from page metadata
         vision_results = {}
-        for page_idx, page in enumerate(document.pages):
+        for idx, page in enumerate(document.pages):
             if page.metadata and 'vision_summary' in page.metadata:
-                vision_results[f"page_{page_idx}"] = page.metadata['vision_summary']
+                vision_results[f"page_{idx}"] = page.metadata['vision_summary']
         
-        logger.success(f"Vision analysis complete: {len(vision_results)} analyses")
+        logger.success(f"Vision analysis complete: analyzed {len(vision_results)} pages")
         
         return {
             'document': document,
@@ -172,23 +178,22 @@ def vision_node(state: DocumentProcessingState) -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Vision node failed: {e}", exc_info=True)
-        error_msg = f"Vision failed: {str(e)}"
         return {
             'vision_results': {},
-            'error_log': [error_msg]
+            'error_log': [f"Vision failed: {str(e)}"]
         }
 
 
 def validation_node(state: DocumentProcessingState) -> Dict[str, Any]:
-    """Validate document for conflicts between OCR and vision.
+    """Validate OCR vs Vision results and detect conflicts.
     
-    Detects discrepancies in numeric values.
+    Validation is CPU-bound with no I/O, so remains synchronous.
     
     Args:
         state: Current processing state
         
     Returns:
-        Partial state update with detected conflicts
+        Partial state update with conflicts
     """
     logger.info(f"Validation node processing document {state['document'].id}")
     
@@ -200,24 +205,26 @@ def validation_node(state: DocumentProcessingState) -> Dict[str, Any]:
         # Get agent
         agent = _get_agent("validation", config.model_dump())
         
-        # Gracefully handle missing inputs
+        # Get vision results (may be empty if vision failed)
         vision_results = state.get('vision_results', {})
+        
         if not vision_results:
-            logger.warning("No vision results available for validation - skipping conflict detection")
+            logger.warning("No vision results available for validation, skipping conflict detection")
+            return {
+                'conflicts': [],
+                'processing_stage': ProcessingStage.COMPLETE
+            }
         
-        # Validate document
-        conflicts = agent.validate(
-            state['document'],
-            vision_results
-        )
+        # Validate and detect conflicts
+        conflicts = agent.validate(state['document'], vision_results)
         
-        logger.success(f"Validation complete: {len(conflicts)} conflicts detected")
-        
-        # Update processing stage based on conflicts
-        if conflicts:
-            stage = ProcessingStage.CONFLICT
-        else:
+        # Determine processing stage based on conflicts
+        if not conflicts:
             stage = ProcessingStage.COMPLETE
+            logger.success("Validation complete: No conflicts detected")
+        else:
+            stage = ProcessingStage.CONFLICT
+            logger.warning(f"Validation complete: {len(conflicts)} conflicts detected")
         
         return {
             'conflicts': conflicts,
@@ -226,10 +233,66 @@ def validation_node(state: DocumentProcessingState) -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Validation node failed: {e}", exc_info=True)
-        error_msg = f"Validation failed: {str(e)}"
-        # Return empty conflicts list to allow workflow to continue
+        # Return empty conflicts to allow workflow to continue
         return {
             'conflicts': [],
             'processing_stage': ProcessingStage.COMPLETE,
-            'error_log': [error_msg]
+            'error_log': [f"Validation failed: {str(e)}"]
         }
+
+
+def auto_resolution_node(state: DocumentProcessingState) -> Dict[str, Any]:
+    """Automatically resolve low-impact conflicts.
+    
+    Args:
+        state: Current processing state
+        
+    Returns:
+        Partial state update with resolutions
+    """
+    logger.info("Auto-resolution node processing conflicts")
+    
+    conflicts = state.get('conflicts', [])
+    
+    # Simple auto-resolution: accept OCR for low-impact conflicts
+    resolutions = []
+    for conflict in conflicts:
+        if hasattr(conflict, 'impact_score') and conflict.impact_score < 0.5:
+            resolution = {
+                'conflict_id': conflict.id if hasattr(conflict, 'id') else str(conflict),
+                'resolved_value': conflict.ocr_value if hasattr(conflict, 'ocr_value') else None,
+                'resolution_method': 'auto_ocr_preference'
+            }
+            resolutions.append(resolution)
+    
+    logger.info(f"Auto-resolved {len(resolutions)}/{len(conflicts)} conflicts")
+    
+    return {
+        'resolutions': resolutions,
+        'processing_stage': ProcessingStage.COMPLETE
+    }
+
+
+def human_review_node(state: DocumentProcessingState) -> Dict[str, Any]:
+    """Pause workflow for human review of high-impact conflicts.
+    
+    This is a placeholder that marks the state as awaiting human input.
+    The actual UI interaction happens outside the workflow.
+    
+    Args:
+        state: Current processing state
+        
+    Returns:
+        Partial state update indicating human review needed
+    """
+    logger.info("Human review node - workflow paused for manual resolution")
+    
+    conflicts = state.get('conflicts', [])
+    high_impact = [c for c in conflicts if hasattr(c, 'impact_score') and c.impact_score >= 0.5]
+    
+    logger.warning(f"Awaiting human review for {len(high_impact)} high-impact conflicts")
+    
+    return {
+        'processing_stage': ProcessingStage.HUMAN_REVIEW,
+        'error_log': [f"Workflow paused: {len(high_impact)} conflicts require manual review"]
+    }
