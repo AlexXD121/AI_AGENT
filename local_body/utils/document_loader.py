@@ -169,9 +169,13 @@ class DocumentLoader:
             
             return metadata
             
+        except PdfReadError:
+            # Re-raise PDF corruption errors - don't swallow them
+            raise
+            
         except Exception as e:
             logger.warning(f"Failed to extract full metadata: {e}")
-            # Return minimal metadata
+            # Return minimal metadata for other errors
             return DocumentMetadata(
                 title=file_path.stem,
                 author=None,

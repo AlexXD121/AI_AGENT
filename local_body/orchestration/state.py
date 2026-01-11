@@ -57,5 +57,7 @@ class ProcessingStage:
     OCR = "ocr"
     VISION = "vision"
     CONFLICT = "conflict"
+    AUTO_RESOLVED = "auto_resolved"
+    HUMAN_REVIEW = "human_review"
     COMPLETE = "complete"
     FAILED = "failed"

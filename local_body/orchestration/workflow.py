@@ -11,74 +11,15 @@ from loguru import logger
 
 from langgraph.graph import StateGraph, END
 from local_body.orchestration.state import DocumentProcessingState, ProcessingStage
-from local_body.orchestration.nodes import layout_node, ocr_node, vision_node, validation_node
+from local_body.orchestration.nodes import (
+    layout_node, 
+    ocr_node, 
+    vision_node, 
+    validation_node,
+    auto_resolution_node,
+    human_review_node
+)
 from local_body.orchestration.checkpoint import CheckpointManager
-
-
-def auto_resolution_node(state: DocumentProcessingState) -> Dict[str, Any]:
-    """Automatically resolve low-impact conflicts.
-    
-    Logic: If discrepancy < 0.20, use OCR value; otherwise flag for review.
-    
-    Args:
-        state: Current processing state
-        
-    Returns:
-        Partial state update with resolved conflicts
-    """
-    logger.info("Auto-resolving conflicts")
-    
-    conflicts = state.get('conflicts', [])
-    resolutions = []
-    flagged = []
-    
-    for conflict in conflicts:
-        if conflict.discrepancy_percentage < 0.20:
-            # Auto-resolve: use OCR value for low discrepancy
-            from local_body.core.datamodels import ConflictResolution, ResolutionMethod
-            resolution = ConflictResolution(
-                conflict_id=conflict.id,
-                chosen_value=conflict.text_value,
-                resolution_method=ResolutionMethod.AUTO,
-                confidence=0.8
-            )
-            resolutions.append(resolution)
-            conflict.resolve(resolution)
-            logger.info(f"Auto-resolved conflict {conflict.id}: chose OCR value {conflict.text_value}")
-        else:
-            # Flag for manual review
-            conflict.flag(reason="Discrepancy >= 20%")
-            flagged.append(conflict)
-            logger.warning(f"Flagged conflict {conflict.id} for manual review")
-    
-    # Update processing stage
-    if flagged:
-        stage = ProcessingStage.CONFLICT
-    else:
-        stage = ProcessingStage.COMPLETE
-    
-    return {
-        'resolutions': resolutions,
-        'conflicts': conflicts,  # Updated with resolution status
-        'processing_stage': stage
-    }
-
-
-def human_review_node(state: DocumentProcessingState) -> Dict[str, Any]:
-    """Pause workflow for human review of high-impact conflicts.
-    
-    Args:
-        state: Current processing state
-        
-    Returns:
-        Partial state update indicating pending review
-    """
-    logger.warning("High-impact conflicts detected - pausing for human review")
-    
-    return {
-        'processing_stage': ProcessingStage.CONFLICT,
-        'error_log': ["Waiting for human review of high-impact conflicts"]
-    }
 
 
 def route_after_validation(state: DocumentProcessingState) -> Literal["end", "auto_resolve", "human_review"]:
