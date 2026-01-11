@@ -162,9 +162,16 @@ class TestDocumentVectorStore:
         # Check collection name
         assert call_args.kwargs['collection_name'] == "test_documents"
         
-        # Check vector config has size 384
+        # Check vector config has named vectors (hybrid search schema)
         vectors_config = call_args.kwargs['vectors_config']
-        assert vectors_config.size == 384
+        assert isinstance(vectors_config, dict), "vectors_config should be a dict for named vectors"
+        assert 'text-dense' in vectors_config, "Should have text-dense vector config"
+        assert vectors_config['text-dense'].size == 384, "Dense vector should be 384 dimensions"
+        
+        # Check sparse vector config exists
+        sparse_config = call_args.kwargs.get('sparse_vectors_config')
+        assert sparse_config is not None, "Should have sparse vector config"
+        assert 'text-sparse' in sparse_config, "Should have text-sparse vector config"
     
     @pytest.mark.asyncio
     @patch('local_body.database.vector_store.TextEmbedding')

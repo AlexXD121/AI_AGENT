@@ -48,6 +48,7 @@ logs/
 
 # Docker
 .docker/
+docker-volumes/
 
 # Test coverage
 .coverage
@@ -62,3 +63,24 @@ htmlcov/
 *.pyc
 .env
 .env.local
+
+# Project-specific
+test_checkpoint/
+exports/
+checkpoints/
+qdrant_data/
+*.safetensors
+
+# Verification & Debug Scripts (keep in git but list here for reference)
+# verify_*.py files are kept for reproducibility
+
+# Large model files
+yolov8n.pt
+*.weights
+
+# Fastembed cache
+.fastembed_cache/
+
+# Colab temporary files
+colab_brain/temp/
+colab_brain/__pycache__/
