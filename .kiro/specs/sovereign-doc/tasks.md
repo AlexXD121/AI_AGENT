@@ -142,27 +142,32 @@
     - _Requirements: 11.5, 12.3, 12.4_
     - **Status: COMPLETE - ManualResolutionManager backend service**
 
-- [ ] 8. Build vector storage and search system
-  - [ ] 8.1 Implement document embedding pipeline
+- [x] 8. Build vector storage and search system
+  - [x] 8.1 Implement document embedding pipeline
     - Create BGE-small-en-v1.5 integration for text embeddings
     - Add CLIP model integration for image embeddings
     - Implement hierarchical metadata storage (document_id, page, section)
     - Create batch embedding processing with progress tracking
+    - Smart chunking: vision summaries, tables (CSV), text blocks
     - _Requirements: 8.5, 8.6, 13.1_
+    - **Status: COMPLETE - Smart document chunking with structure-aware embeddings**
 
-  - [ ] 8.2 Create semantic search functionality
-    - Implement hybrid search combining BM25 and semantic similarity
-    - Add query response time optimization for large collections
-    - Create result ranking and relevance scoring
+  - [x] 8.2 Create semantic search functionality
+    - Implement hybrid search combining dense (BGE) and sparse (SPLADE) vectors
+    - Add query response time optimization with caching (LRU, 5min TTL)
+    - Create RRF (Reciprocal Rank Fusion) for optimal ranking
     - Implement search result caching and performance monitoring
     - _Requirements: 8.2, 8.3, 8.6_
+    - **Status: COMPLETE - Hybrid search with RRF fusion and caching**
 
-  - [ ] 8.3 Build multi-document querying system
-    - Create cross-document search with source citation
-    - Implement comparative analysis for financial data queries
+  - [x] 8.3 Build multi-document querying system
+    - Create cross-document search with flexible grouping (document/type/ungrouped)
+    - Implement comparative analysis extracting numeric fields across documents
     - Add result grouping by document and section type
-    - Create trend analysis and summary generation
+    - Create trend analysis with % change, direction, and period averages
+    - Reuse ValidationAgent for consistent numeric extraction
     - _Requirements: 13.2, 13.3, 13.4, 13.5_
+    - **Status: COMPLETE - MultiDocumentQuery with comparative & trend analysis**
 
 - [ ] 9. Create Streamlit user interface
   - [ ] 9.1 Build main dashboard layout

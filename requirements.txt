@@ -50,3 +50,6 @@ httpx  # Required for FastAPI TestClient
 # Testing
 pytest>=8.0.0
 pytest-asyncio>=0.23.0
+
+# UI
+streamlit>=1.30.0
