@@ -153,7 +153,7 @@ def _render_conflict_card(
                 "✅ Accept OCR",
                 key=f"btn_ocr_{conflict.id}_{index}",
                 type="secondary",
-                use_container_width=True
+                width='stretch'
             ):
                 _apply_resolution(
                     manager=manager,
@@ -169,7 +169,7 @@ def _render_conflict_card(
                 "👁️ Accept Vision",
                 key=f"btn_vision_{conflict.id}_{index}",
                 type="secondary",
-                use_container_width=True
+                width='stretch'
             ):
                 _apply_resolution(
                     manager=manager,
@@ -192,7 +192,7 @@ def _render_conflict_card(
                 "📝 Apply Manual",
                 key=f"btn_manual_{conflict.id}_{index}",
                 type="primary",
-                use_container_width=True,
+                width='stretch',
                 disabled=not manual_value
             ):
                 _apply_resolution(
@@ -320,7 +320,7 @@ def _render_resolution_history(
             if history_data:
                 st.dataframe(
                     history_data,
-                    use_container_width=True,
+                    width='stretch',
                     hide_index=True
                 )
                 
@@ -356,7 +356,7 @@ def render_conflict_summary_widget(doc_id: str, checkpoint_dir: Optional[str] = 
             first_conflict = conflicts[0]
             st.caption(f"Next: {first_conflict.conflict_type.value}")
             
-            if st.button("🔧 Resolve Now", use_container_width=True):
+            if st.button("🔧 Resolve Now", width='stretch'):
                 # Navigate to conflict panel (handled by main app)
                 st.session_state['show_conflicts'] = True
                 st.rerun()

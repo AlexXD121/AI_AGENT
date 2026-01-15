@@ -84,3 +84,15 @@ yolov8n.pt
 # Colab temporary files
 colab_brain/temp/
 colab_brain/__pycache__/
+
+# Streamlit
+.streamlit/
+*.streamlit/
+
+# Temporary upload directories
+temp/
+data/temp/
+
+# Test artifacts
+test_results/
+*.test.json

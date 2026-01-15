@@ -205,7 +205,7 @@ class ResultsRenderer:
                 data=json_data,
                 file_name=f"{self.document.id}_results.json",
                 mime="application/json",
-                use_container_width=True
+                width='stretch'
             )
         
         with col2:
@@ -220,7 +220,7 @@ class ResultsRenderer:
                     data=excel_data,
                     file_name=f"{self.document.id}_results.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
+                    width='stretch'
                 )
             except Exception as e:
                 st.error(f"Excel export failed: {str(e)}")
@@ -236,7 +236,7 @@ class ResultsRenderer:
                 data=markdown_data,
                 file_name=f"{self.document.id}_results.md",
                 mime="text/markdown",
-                use_container_width=True
+                width='stretch'
             )
         
         # Preview section
@@ -252,7 +252,7 @@ class ResultsRenderer:
             st.json(json.loads(json_data), expanded=False)
         elif preview_format == "Excel (table)":
             df = self._to_flat_dataframe()
-            st.dataframe(df, use_container_width=True)
+            st.dataframe(df, width='stretch')
         elif preview_format == "Markdown":
             st.markdown(markdown_data)
     

@@ -75,6 +75,8 @@ class BaseAgent(ABC):
     def get_config(self, key: str, default: Any = None) -> Any:
         """Get a configuration value.
         
+        Handles both dict configs and Pydantic SystemConfig objects.
+        
         Args:
             key: Configuration key to retrieve
             default: Default value if key doesn't exist
@@ -82,7 +84,16 @@ class BaseAgent(ABC):
         Returns:
             Configuration value or default
         """
-        return self.config.get(key, default)
+        # Handle Pydantic models (SystemConfig)
+        if hasattr(self.config, 'model_dump'):
+            config_dict = self.config.model_dump()
+            return config_dict.get(key, default)
+        # Handle regular dicts
+        elif hasattr(self.config, 'get'):
+            return self.config.get(key, default)
+        # Handle objects with attributes
+        else:
+            return getattr(self.config, key, default)
     
     def update_config(self, updates: Dict[str, Any]) -> None:
         """Update agent configuration.

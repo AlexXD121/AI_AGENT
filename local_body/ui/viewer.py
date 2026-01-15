@@ -1,20 +1,28 @@
-"""Document viewer component with bounding box visualization.
+"""Document viewer component for PDF rendering with bounding boxes.
 
-This module provides PDF page rendering with confidence-based color-coded
-bounding boxes for detected regions.
+Displays PDF pages as images with overlaid region annotations.
 """
 
-from typing import List, Optional
 from io import BytesIO
+from typing import List, Optional
 
 import streamlit as st
 from PIL import Image, ImageDraw, ImageFont
+from loguru import logger
+
+# Try pdf2image first, fallback to PyMuPDF
 try:
     from pdf2image import convert_from_path
+    PDF2IMAGE_AVAILABLE = True
 except ImportError:
-    convert_from_path = None
+    PDF2IMAGE_AVAILABLE = False
 
-from loguru import logger
+# PyMuPDF fallback
+try:
+    import fitz
+    PYMUPDF_AVAILABLE = True
+except ImportError:
+    PYMUPDF_AVAILABLE = False
 
 from local_body.core.datamodels import Region, BoundingBox
 
@@ -29,12 +37,15 @@ class DocumentViewer:
     - Responsive scaling
     """
     
-    # Color scheme based on confidence
+    # Professional fintech color palette
     COLORS = {
-        "high": "#00FF00",      # Green for confidence > 0.90
-        "medium": "#FFFF00",    # Yellow for 0.70 < confidence <= 0.90
-        "low": "#FF0000"        # Red for confidence <= 0.70
+        "high": "#10B981",      # Emerald green (high confidence >90%)
+        "medium": "#F59E0B",    # Amber (medium confidence 70-90%)
+        "low": "#EF4444"        # Red (low confidence <70%)
     }
+    
+    # Thinner, more elegant stroke
+    BOX_STROKE_WIDTH = 2
     
     def __init__(self):
         """Initialize DocumentViewer."""
@@ -118,6 +129,78 @@ class DocumentViewer:
         
         return image
     
+    def _render_pdf_page(
+        self,
+        pdf_path: str,
+        page_number: int
+    ) -> Image.Image:
+        """Render a PDF page as PIL Image.
+        
+        Uses PyMuPDF by default (no system dependencies needed).
+        Falls back to pdf2image only if explicitly available.
+        
+        Args:
+            pdf_path: Path to PDF file
+            page_number: Page number (1-indexed)
+            
+        Returns:
+            PIL Image of the rendered page
+        """
+        # Use PyMuPDF as primary (no Poppler needed!)
+        if PYMUPDF_AVAILABLE:
+            return self._render_pdf_page_pymupdf(pdf_path, page_number)
+        
+        # Only try pdf2image if PyMuPDF not available
+        if PDF2IMAGE_AVAILABLE:
+            try:
+                pages = convert_from_path(
+                    pdf_path,
+                    first_page=page_number,
+                    last_page=page_number,
+                    dpi=150
+                )
+                if pages:
+                    return pages[0]
+            except Exception as e:
+                logger.error(f"pdf2image failed: {e}")
+        
+        # No renderer available
+        raise RuntimeError(
+            "No PDF renderer available. Install PyMuPDF: pip install PyMuPDF"
+        )
+    
+    def _render_pdf_page_pymupdf(
+        self,
+        pdf_path: str,
+        page_number: int
+    ) -> Image.Image:
+        """Render PDF page using PyMuPDF (fallback).
+        
+        Args:
+            pdf_path: Path to PDF file
+            page_number: Page number (1-indexed)
+            
+        Returns:
+            PIL Image of the rendered page
+        """
+        pdf_doc = fitz.open(pdf_path)
+        try:
+            # PyMuPDF uses 0-indexed pages
+            page = pdf_doc[page_number - 1]
+            
+            # Render at 150 DPI (zoom factor 2.08)
+            zoom = 150 / 72
+            mat = fitz.Matrix(zoom, zoom)
+            pix = page.get_pixmap(matrix=mat)
+            
+            # Convert to PIL Image
+            img_data = pix.tobytes("png")
+            img = Image.open(BytesIO(img_data))
+            
+            return img
+        finally:
+            pdf_doc.close()
+    
     def render_page(
         self,
         pdf_path: str,
@@ -132,28 +215,9 @@ class DocumentViewer:
             regions: Optional list of regions to draw bounding boxes for
         """
         try:
-            # Check if pdf2image is available
-            if convert_from_path is None:
-                st.error(
-                    "⚠️ PDF viewer requires pdf2image. "
-                    "Install: `pip install pdf2image` and poppler-utils"
-                )
-                return
-            
             # Convert PDF page to image
             with st.spinner(f"Loading page {page_number}..."):
-                images = convert_from_path(
-                    pdf_path,
-                    first_page=page_number,
-                    last_page=page_number,
-                    dpi=150  # Balance between quality and performance
-                )
-                
-                if not images:
-                    st.error(f"Could not load page {page_number}")
-                    return
-                
-                image = images[0]
+                image = self._render_pdf_page(pdf_path, page_number)
             
             # Draw bounding boxes if provided
             if regions:
@@ -162,12 +226,12 @@ class DocumentViewer:
                 
                 if page_regions:
                     image = self._draw_bounding_boxes(image, page_regions)
-                    st.caption(f"📊 {len(page_regions)} regions detected")
+                    st.caption(f"{len(page_regions)} regions detected")
                 else:
                     st.caption("No regions detected on this page")
             
             # Display image
-            st.image(image, use_column_width=True)
+            st.image(image, width="stretch")
             
             # Show confidence legend
             if regions:
@@ -207,7 +271,7 @@ class DocumentViewer:
                 st.caption(f"📊 {len(regions)} regions detected")
             
             # Display image
-            st.image(image, use_column_width=True)
+            st.image(image, width="stretch")
             
             # Show confidence legend
             if regions:

@@ -1,18 +1,39 @@
-"""Document loading and conversion utilities.
+"""Document loader for PDF files with validation and preprocessing.
 
-This module provides functionality for loading PDF documents and converting
-them into structured Document objects with metadata and page images.
+Handles PDF loading, metadata extraction, and page image conversion
+with robust error handling for corrupted files.
 """
 
 import io
 from pathlib import Path
-from typing import Optional
+from typing import List
 
-from pdf2image import convert_from_path
-from pdf2image.exceptions import PDFInfoNotInstalledError, PDFPageCountError
+from loguru import logger
+from PIL import Image
+
+# PDF reading
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
-from loguru import logger
+
+# Try pdf2image first (requires poppler), fallback to PyMuPDF
+try:
+    from pdf2image import convert_from_path
+    from pdf2image.exceptions import (
+        PDFInfoNotInstalledError,
+        PDFPageCountError
+    )
+    PDF2IMAGE_AVAILABLE = True
+except ImportError:
+    PDF2IMAGE_AVAILABLE = False
+    logger.warning("pdf2image not available, will use PyMuPDF fallback")
+
+# PyMuPDF fallback (no system dependencies)
+try:
+    import fitz  # PyMuPDF
+    PYMUPDF_AVAILABLE = True
+except ImportError:
+    PYMUPDF_AVAILABLE = False
+    logger.warning("PyMuPDF not available")
 
 from local_body.core.datamodels import (
     Document,
@@ -184,8 +205,43 @@ class DocumentLoader:
                 document_type="pdf"
             )
     
-    def _convert_to_images(self, file_path: Path) -> list:
-        """Convert PDF pages to PIL images.
+    def _convert_to_images(self, file_path: Path) -> List[Image.Image]:
+        """Convert PDF pages to PIL Images.
+        
+        Tries pdf2image first, falls back to PyMuPDF if poppler not available.
+        
+        Args:
+            file_path: Path to PDF file
+            
+        Returns:
+            List of PIL Image objects (one per page)
+        """
+        logger.debug(f"Converting PDF to images at {self.dpi} DPI...")
+        
+        # Use PyMuPDF as primary (no Poppler needed, faster)
+        if PYMUPDF_AVAILABLE:
+            return self._convert_to_images_pymupdf(file_path)
+        
+        # Only try pdf2image if PyMuPDF not available
+        if PDF2IMAGE_AVAILABLE:
+            try:
+                images = convert_from_path(
+                    str(file_path),
+                    dpi=self.dpi,
+                    fmt='PNG'
+                )
+                logger.debug(f"Converted {len(images)} pages using pdf2image")
+                return images
+            except (PDFInfoNotInstalledError, Exception) as e:
+                logger.error(f"pdf2image failed: {e}")
+        
+        # No PDF conversion available
+        raise DocumentLoadError(
+            "No PDF conversion library available. Install PyMuPDF: pip install PyMuPDF"
+        )
+    
+    def _convert_to_images_pymupdf(self, file_path: Path) -> List[Image.Image]:
+        """Convert PDF to images using PyMuPDF (fallback method).
         
         Args:
             file_path: Path to PDF file
@@ -193,13 +249,29 @@ class DocumentLoader:
         Returns:
             List of PIL Image objects
         """
-        logger.debug(f"Converting PDF to images at {self.dpi} DPI...")
+        logger.debug("Using PyMuPDF for PDF conversion (Poppler not available)")
         
-        images = convert_from_path(
-            str(file_path),
-            dpi=self.dpi,
-            fmt='png'
-        )
+        images = []
+        pdf_document = fitz.open(str(file_path))
         
-        logger.debug(f"Converted {len(images)} pages to images")
-        return images
+        try:
+            # Convert DPI to zoom factor (72 DPI is default)
+            zoom = self.dpi / 72
+            mat = fitz.Matrix(zoom, zoom)
+            
+            for page_num in range(len(pdf_document)):
+                page = pdf_document[page_num]
+                
+                # Render page to pixmap
+                pix = page.get_pixmap(matrix=mat)
+                
+                # Convert pixmap to PIL Image
+                img_data = pix.tobytes("png")
+                img = Image.open(io.BytesIO(img_data))
+                images.append(img)
+            
+            logger.debug(f"Converted {len(images)} pages using PyMuPDF")
+            return images
+        
+        finally:
+            pdf_document.close()

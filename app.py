@@ -1,139 +1,339 @@
-"""Sovereign-Doc Streamlit Application.
+"""Sovereign Doc - Professional Document Intelligence Platform
 
-Main entry point for the Streamlit UI.
+Main Streamlit application with sleek dark theme.
 """
 
 import streamlit as st
 from loguru import logger
 
-from local_body.ui.dashboard import render_main_dashboard
-from local_body.ui.upload import render_upload_page
+from local_body.ui.upload import render_upload_hero
+from local_body.ui.dashboard import render_analysis_dashboard
 
 
-# Configure Streamlit page
+# Configure page
 st.set_page_config(
-    page_title="Sovereign-Doc",
+    page_title="Sovereign Doc",
     page_icon="📄",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
-# Custom CSS for better styling
+# Professional Dark Theme CSS
 st.markdown("""
 <style>
+    /* Hide Streamlit branding */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    
+    /* Global typography */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    
+    html, body, [class*="css"] {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    
+    /* Dark background */
+    .stApp {
+        background-color: #0F0F0F;
+    }
+    
     /* Main container */
     .main .block-container {
-        padding-top: 2rem;
+        padding-top: 3rem;
         padding-bottom: 2rem;
+        max-width: 1400px;
+        background-color: #0F0F0F;
     }
     
-    /* Confidence colors */
-    .confidence-high {
-        color: #00FF00;
-        font-weight: bold;
-    }
-    .confidence-medium {
-        color: #FFAA00;
-        font-weight: bold;
-    }
-    .confidence-low {
-        color: #FF0000;
-        font-weight: bold;
+    /* Headers */
+    h1 {
+        font-weight: 700;
+        font-size: 2.5rem;
+        letter-spacing: -0.02em;
+        color: #FFFFFF;
+        margin-bottom: 0.5rem;
     }
     
-    /* Conflict card styling */
-    .conflict-card {
-        border-left: 4px solid #FF9800;
-        padding-left: 1rem;
+    h2 {
+        font-weight: 600;
+        font-size: 1.5rem;
+        color: #E5E5E5;
         margin-bottom: 1rem;
     }
     
-    /* Processing stage indicator */
-    .stProgress > div > div > div > div {
-        background-image: linear-gradient(to right, #00FF00, #0088FF);
+    h3 {
+        font-weight: 600;
+        font-size: 1.125rem;
+        color: #D4D4D4;
+        margin-bottom: 0.75rem;
+    }
+    
+    /* Paragraph text */
+    p {
+        color: #A3A3A3;
+    }
+    
+    /* Flat toast notifications */
+    .stAlert {
+        border-radius: 0.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+        padding: 1rem 1.5rem;
+    }
+    
+    /* Info box */
+    .stAlert[data-baseweb="notification"] {
+        background-color: #1E293B;
+        color: #60A5FA;
+        border-color: #3B82F6;
+    }
+    
+    /* Success box */
+    .stSuccess {
+        background-color: #1E3A2C;
+        color: #34D399;
+        border-color: #10B981;
+    }
+    
+    /* Warning box */
+    .stWarning {
+        background-color: #3A2E1E;
+        color: #FBBF24;
+        border-color: #F59E0B;
+    }
+    
+    /* Error box */
+    .stError {
+        background-color: #3A1E1E;
+        color: #F87171;
+        border-color: #EF4444;
+    }
+    
+    /* Buttons */
+    .stButton > button {
+        border-radius: 0.5rem;
+        font-weight: 500;
+        padding: 0.625rem 1.25rem;
+        border: none;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
+    
+    .stButton > button:hover {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        transform: translateY(-1px);
+    }
+    
+    /* Primary button - Electric Blue */
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
+        color: white;
+    }
+    
+    .stButton > button[kind="primary"]:hover {
+        background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
+    }
+    
+    /* Secondary button */
+    .stButton > button[kind="secondary"] {
+        background-color: #1F1F1F;
+        color: #E5E5E5;
+        border: 1px solid #404040;
+    }
+    
+    .stButton > button[kind="secondary"]:hover {
+        background-color: #2A2A2A;
+        border-color: #525252;
+    }
+    
+    /* File uploader */
+    .stFileUploader {
+        border: 2px dashed #404040;
+        border-radius: 0.75rem;
+        padding: 3rem;
+        background: linear-gradient(135deg, #1A1A1A 0%, #0F0F0F 100%);
+        transition: all 0.3s ease;
+    }
+    
+    .stFileUploader:hover {
+        border-color: #3B82F6;
+        background: linear-gradient(135deg, #1F1F1F 0%, #141414 100%);
+    }
+    
+    /* Metrics */
+    [data-testid="stMetricValue"] {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #FFFFFF;
+    }
+    
+    [data-testid="stMetricLabel"] {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #737373;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    
+    [data-testid="stMetricDelta"] {
+        color: #60A5FA;
+    }
+    
+    /* Dataframes */
+    .stDataFrame {
+        border-radius: 0.5rem;
+        overflow: hidden;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+        background-color: #1A1A1A;
+    }
+    
+    /* Containers with borders */
+    [data-testid="stVerticalBlock"] > [style*="border"] {
+        border-radius: 0.75rem;
+        border-color: #262626;
+        background-color: #171717;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+    }
+    
+    /* Progress bars */
+    .stProgress > div > div {
+        background: linear-gradient(90deg, #3B82F6 0%, #8B5CF6 100%);
+        border-radius: 9999px;
+    }
+    
+    /* Professional card styling */
+    .professional-card {
+        background: linear-gradient(135deg, #1F1F1F 0%, #171717 100%);
+        border-radius: 0.75rem;
+        padding: 1.5rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+        border: 1px solid #262626;
+        margin-bottom: 1rem;
+    }
+    
+    /* Conflict card */
+    .conflict-card {
+        background: linear-gradient(135deg, #3A2E1E 0%, #2D2416 100%);
+        border-left: 4px solid #F59E0B;
+        padding: 1.25rem;
+        border-radius: 0.5rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
+    
+    /* Status badge */
+    .status-badge {
+        display: inline-block;
+        padding: 0.375rem 0.875rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    
+    .status-success {
+        background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+        color: #FFFFFF;
+    }
+    
+    .status-warning {
+        background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+        color: #FFFFFF;
+    }
+    
+    .status-error {
+        background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+        color: #FFFFFF;
+    }
+    
+    /* Sidebar */
+    [data-testid="stSidebar"] {
+        background-color: #0A0A0A;
+        border-right: 1px solid #1F1F1F;
+    }
+    
+    [data-testid="stSidebar"] h3 {
+        color: #FFFFFF;
+    }
+    
+    [data-testid="stSidebar"] p {
+        color: #737373;
+    }
+    
+    /* Dividers */
+    hr {
+        border-color: #262626;
+    }
+    
+    /* Input fields */
+    .stTextInput > div > div > input,
+    .stNumberInput > div > div > input,
+    .stSelectbox > div > div {
+        background-color: #1A1A1A;
+        color: #E5E5E5;
+        border-color: #404040;
+    }
+    
+    /* Captions */
+    .st-caption {
+        color: #737373 !important;
+    }
+    
+    /* Section dividers with gradient */
+    .section-divider {
+        height: 1px;
+        background: linear-gradient(90deg, transparent 0%, #3B82F6 50%, transparent 100%);
+        margin: 2rem 0;
     }
 </style>
 """, unsafe_allow_html=True)
 
 
 def initialize_session_state():
-    """Initialize Streamlit session state variables."""
-    if 'processing_active' not in st.session_state:
-        st.session_state['processing_active'] = False
-    
-    if 'current_state' not in st.session_state:
-        st.session_state['current_state'] = None
+    """Initialize session state variables."""
+    if 'processing_complete' not in st.session_state:
+        st.session_state['processing_complete'] = False
     
     if 'document' not in st.session_state:
         st.session_state['document'] = None
     
-    # Additional state variables for complete integration
-    if 'document_queue' not in st.session_state:
-        st.session_state['document_queue'] = []
+    if 'current_state' not in st.session_state:
+        st.session_state['current_state'] = None
     
-    if 'results' not in st.session_state:
-        st.session_state['results'] = {}
-    
-    if 'config' not in st.session_state:
-        st.session_state['config'] = {}
-    
-    if 'checkpoint_dir' not in st.session_state:
-        st.session_state['checkpoint_dir'] = 'test_checkpoint'
-    
-    if 'current_document_index' not in st.session_state:
-        st.session_state['current_document_index'] = 0
+    if 'analysis_data' not in st.session_state:
+        st.session_state['analysis_data'] = {}
 
 
 def main():
     """Main application entry point."""
-    # Initialize session state
     initialize_session_state()
     
-    # Sidebar
+    # Minimal sidebar
     with st.sidebar:
-        st.title("⚙️ Settings")
+        st.markdown("### Sovereign Doc")
+        st.caption("Document Intelligence")
         
-        # Processing mode (placeholder for Task 9.3)
-        processing_mode = st.selectbox(
-            "Processing Mode",
-            ["Local + Cloud Brain", "Local Only", "Cloud Only"],
-            help="Choose how to process documents"
-        )
+        st.markdown("<div class='section-divider'></div>", unsafe_allow_html=True)
         
-        # Confidence thresholds
-        with st.expander("🎯 Confidence Thresholds"):
-            ocr_threshold = st.slider("OCR Threshold", 0.0, 1.0, 0.7, 0.05)
-            vision_threshold = st.slider("Vision Threshold", 0.0, 1.0, 0.7, 0.05)
+        if st.session_state['processing_complete']:
+            if st.button("Reset Application", width="stretch"):
+                # Clear all session state
+                for key in list(st.session_state.keys()):
+                    del st.session_state[key]
+                st.rerun()
         
-        # Advanced settings
-        with st.expander("🔧 Advanced"):
-            batch_size = st.number_input("Batch Size", 1, 100, 10)
-            enable_caching = st.checkbox("Enable Caching", value=True)
+        st.markdown("<div class='section-divider'></div>", unsafe_allow_html=True)
         
-        st.divider()
-        
-        # System info
-        st.caption("**System Status**")
-        st.caption("🟢 Qdrant: Connected")
-        st.caption("🟢 Embeddings: Ready")
-        
-        if st.button("🔄 Clear Cache"):
-            st.cache_data.clear()
-            st.success("Cache cleared!")
+        st.caption("Version 1.0.0")
+        st.caption("Privacy-First AI")
     
-    # Main content area
-    if st.session_state['processing_active'] and st.session_state.get('current_state'):
-        # Show dashboard with processing state
-        render_main_dashboard(st.session_state['current_state'])
+    # Main content routing
+    if not st.session_state['processing_complete']:
+        render_upload_hero()
     else:
-        # Show advanced upload page
-        render_upload_page()
-    
-    # Footer
-    st.divider()
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.caption("Powered by Sovereign-Doc | YOLOv8 + PaddleOCR + Qwen-VL")
+        render_analysis_dashboard(st.session_state['current_state'])
 
 
 if __name__ == "__main__":
@@ -142,4 +342,3 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"Application error: {e}")
         st.error(f"An error occurred: {str(e)}")
-        st.exception(e)
