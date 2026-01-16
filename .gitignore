@@ -96,3 +96,41 @@ data/temp/
 # Test artifacts
 test_results/
 *.test.json
+
+# Cache and optimization
+data/cache/
+*.diskcache/
+compliance_matrix.md
+
+# Benchmark and validation reports
+tests/benchmarks/reports/
+tests/benchmarks/figures/
+benchmark_*.csv
+benchmark_*.png
+validation_report_*.txt
+
+# Upload directories
+uploads/
+temp_uploads/
+
+# Security and audit
+logs/audit.jsonl
+*.audit.log
+
+# Generated artifacts
+PERFORMANCE_OPTIMIZATION.md
+
+# Compliance and validation
+compliance_matrix.md
+release_validation_*.txt
+
+# Project working files (not for public repo)
+.kiro/
+INTEGRATION_COMPLETE.md
+INTEGRATION_ALREADY_COMPLETE.md
+LANGGRAPH_INTEGRATION.md
+SYSTEM_PROTECTION_ACTIVE.md
+MONITOR_QUICK_REFERENCE.md
+BENCHMARK_REFERENCE.md
+TEST_RESULTS.md
+UI_README.md
