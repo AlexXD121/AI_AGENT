@@ -468,9 +468,27 @@ def main():
         csv_report = runner.save_report(results, format="csv")
         json_report = runner.save_report(results, format="json")
         
+        # NEW: Generate statistical analysis and visualizations
+        logger.info("\n" + "="*80)
+        logger.info("Generating Statistical Analysis and Visualizations...")
+        logger.info("="*80)
+        
+        from tests.benchmarks.analysis import BenchmarkAnalyzer
+        
+        # Convert results to DataFrame
+        df = pd.DataFrame([r.to_dict() for r in results])
+        
+        # Initialize analyzer and generate report
+        analyzer = BenchmarkAnalyzer(df)
+        report_data = analyzer.generate_report(runner.report_dir)
+        
+        # Print statistical summary to console
+        analyzer.print_statistical_summary()
+        
         print(f"\n📊 Reports saved:")
         print(f"   CSV:  {csv_report}")
         print(f"   JSON: {json_report}")
+        print(f"   Figures: {runner.report_dir / 'figures'}")
         print(f"   Latest: {runner.report_dir / 'latest_summary.csv'}")
         
         # Determine exit code
