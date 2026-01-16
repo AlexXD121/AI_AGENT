@@ -33,6 +33,13 @@ fastembed>=0.2.0  # Works in Python 3.12 Docker
 numpy>=1.24.0
 Pillow>=10.0.0
 
+# Benchmarking & Metrics (Task 11.1, 11.2)
+jiwer>=3.0.0         # Character Error Rate calculation
+shapely>=2.0.0       # IoU and geometry calculations
+scipy>=1.10.0        # Linear sum assignment for table cell matching
+pandas>=2.0.0        # Benchmark report generation
+tabulate>=0.9.0      # Console table formatting
+
 # Tunneling (lightweight)
 pyngrok>=7.0.0
 
