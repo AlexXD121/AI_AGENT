@@ -173,6 +173,7 @@ class VisionAgent(BaseAgent):
         Raises:
             ConnectionError: If Cloud Brain is unreachable
             httpx.TimeoutException: If request times out
+            httpx.HTTPStatusError: If authentication fails (401)
         """
         # Check cache first
         if self.enable_cache:
@@ -189,8 +190,16 @@ class VisionAgent(BaseAgent):
         public_url = status['public_url']
         endpoint = f"{public_url}/analyze"
         
+        # Get security manager for auth token
+        from local_body.core.security import get_security_manager
+        security_mgr = get_security_manager()
+        
+        # Check if requests should be blocked due to security
+        if security_mgr.should_block_request():
+            raise ConnectionError("Requests blocked due to security concerns")
+        
         # Send request with retry
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with httpx.AsyncClient(timeout=self.timeout, verify=True) as client:  # SSL verification enabled
             for attempt in range(self.max_retries):
                 try:
                     logger.debug(f"Sending request to {endpoint} (attempt {attempt+1}/{self.max_retries})")
@@ -198,12 +207,47 @@ class VisionAgent(BaseAgent):
                     # Compress image before sending
                     compressed_bytes = self._compress_image(image_bytes)
                     
-                    # Prepare multipart request with API key auth
+                    # Prepare multipart request with auth headers
                     files = {'file': ('image.jpg', compressed_bytes, 'image/jpeg')}
                     data = {'query': query}
-                    headers = {'Authorization': f'Bearer {self.api_key}'}
+                    
+                    # Build headers with security token
+                    headers = {
+                        'Authorization': f'Bearer {self.api_key}',  # Legacy API key (backward compat)
+                    }
+                    
+                    # Add security token for authentication
+                    try:
+                        auth_header = security_mgr.get_auth_header()
+                        headers.update(auth_header)
+                    except ValueError as e:
+                        logger.error(f"Security token not configured: {e}")
+                        # Allow fallback to local in this case
+                        raise ConnectionError("Access token not configured")
                     
                     response = await client.post(endpoint, files=files, data=data, headers=headers)
+                    
+                    # Handle authentication errors specifically
+                    if response.status_code == 401:
+                        logger.error("Authentication failed (401 Unauthorized)")
+                        security_mgr.record_auth_failure(endpoint, 401)
+                        
+                        # Trigger security alert
+                        from local_body.core.alerts import AlertManager, AlertSeverity, AlertComponent
+                        alert_mgr = AlertManager.get_instance()
+                        alert_mgr.create_alert(
+                            component=AlertComponent.SECURITY,
+                            severity=AlertSeverity.ERROR,
+                            message="Colab Brain authentication failed - check access token",
+                            metadata={"endpoint": endpoint}
+                        )
+                        
+                        raise httpx.HTTPStatusError(
+                            "Authentication failed",
+                            request=response.request,
+                            response=response
+                        )
+                    
                     response.raise_for_status()
                     
                     # Extract result
@@ -218,6 +262,9 @@ class VisionAgent(BaseAgent):
                     return result
                     
                 except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 401:
+                        # Don't retry auth failures
+                        raise
                     logger.error(f"HTTP error {e.response.status_code}: {e}")
                     if attempt == self.max_retries - 1:
                         raise

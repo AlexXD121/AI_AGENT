@@ -15,6 +15,7 @@ class AlertSeverity(Enum):
     """Alert severity levels."""
     INFO = "info"
     WARNING = "warning"
+    ERROR = "error"  # For authentication failures, etc.
     CRITICAL = "critical"
 
 
@@ -25,6 +26,7 @@ class AlertComponent(Enum):
     NETWORK = "network"  # Internet and tunnel connectivity
     MODEL = "model"  # AI models (Ollama, Vision)
     STORAGE = "storage"  # Disk space
+    SECURITY = "security"  # Authentication, access control, security threats
 
 
 @dataclass
@@ -322,3 +324,51 @@ class AlertSystem:
             True if any critical alerts are active
         """
         return len(self.get_critical_alerts()) > 0
+
+
+# Singleton wrapper for easier access
+class AlertManager:
+    """Singleton wrapper for AlertSystem."""
+    
+    _instance = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._alert_system = AlertSystem()
+        return cls._instance
+    
+    @classmethod
+    def get_instance(cls) -> "AlertManager":
+        """Get singleton instance."""
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+    
+    def create_alert(
+        self,
+        component: AlertComponent,
+        severity: AlertSeverity,
+        message: str,
+        metadata: Optional[Dict] = None
+    ) -> Alert:
+        """Create a new alert."""
+        return self._alert_system.add_alert(severity, component, message, metadata)
+    
+    def get_active_alerts(
+        self,
+        component: Optional[AlertComponent] = None
+    ) -> List[Alert]:
+        """Get active alerts."""
+        return self._alert_system.get_active_alerts(component=component)
+    
+    def resolve_alerts(
+        self,
+        component: Optional[AlertComponent] = None
+    ) -> None:
+        """Resolve alerts."""
+        self._alert_system.resolve_alerts(component=component)
+    
+    def get_summary(self) -> Dict[str, int]:
+        """Get alert summary."""
+        return self._alert_system.get_alert_summary()

@@ -271,3 +271,136 @@ class ModelManager:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit."""
         await self.close()
+    
+    async def unload_model(self, model_name: str) -> bool:
+        """Aggressively unload a specific model from memory.
+        
+        This performs:
+        1. Ollama API unload (keep_alive=0)
+        2. Python garbage collection
+        3. GPU cache clearing (if applicable)
+        
+        Args:
+            model_name: Name of model to unload
+            
+        Returns:
+            True if unloaded successfully
+        """
+        logger.info(f"Aggressively unloading model: {model_name}")
+        
+        try:
+            # Step 1: Unload via Ollama API
+            response = await self.client.post(
+                f"{self.base_url}/api/generate",
+                json={
+                    "model": model_name,
+                    "prompt": "",
+                    "keep_alive": 0
+                }
+            )
+            
+            if response.status_code == 200:
+                logger.debug(f"Ollama unloaded: {model_name}")
+            else:
+                logger.warning(f"Ollama unload failed for {model_name}: {response.status_code}")
+            
+            # Step 2: Force Python garbage collection
+            import gc
+            gc.collect()
+            logger.debug("Garbage collection triggered")
+            
+            # Step 3: Clear GPU cache if available
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    torch.cuda.synchronize()
+                    logger.debug("GPU cache cleared")
+            except ImportError:
+                # torch not installed, skip GPU cleanup
+                pass
+            
+            logger.success(f"Model {model_name} fully unloaded from memory")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to unload model {model_name}: {e}")
+            return False
+    
+    async def optimize_resources(self, current_stage: str) -> None:
+        """Optimize memory by unloading models not needed for current stage.
+        
+        Stage-based unloading strategy:
+        - LAYOUT → Keep layout, unload others
+        - OCR → Keep OCR, unload others
+        - VISION → Keep vision, unload OCR/layout
+        - VALIDATION → Unload processing models
+        - COMPLETED → Unload ALL models
+        
+        Args:
+            current_stage: Current processing stage
+        """
+        logger.info(f"Optimizing resources for stage: {current_stage}")
+        
+        # Define which models to unload for each stage
+        stage_unload_map = {
+            "LAYOUT": ["llama3.2", "llama3.2-vision"],  # Keep layout models
+            "OCR": ["llama3.2-vision"],  # Keep OCR, unload vision
+            "VISION": ["llama3.2"],  # Keep vision, unload text models
+            "VALIDATION": ["llama3.2-vision"],  # Unload heavy vision
+            "COMPLETED": self.config.required_ollama_models,  # Unload ALL
+        }
+        
+        models_to_unload = stage_unload_map.get(current_stage, [])
+        
+        if models_to_unload:
+            logger.info(f"Unloading {len(models_to_unload)} models for {current_stage} stage")
+            
+            for model in models_to_unload:
+                await self.unload_model(model)
+            
+            # Final cleanup
+            import gc
+            gc.collect()
+            
+            logger.success(f"Resource optimization complete for {current_stage}")
+        else:
+            logger.debug(f"No models to unload for {current_stage} stage")
+    
+    def get_memory_stats(self) -> dict:
+        """Get current memory usage statistics.
+        
+        Returns:
+            Dictionary with memory metrics
+        """
+        try:
+            import psutil
+            import gc
+            
+            # System memory
+            mem = psutil.virtual_memory()
+            
+            stats = {
+                "ram_total_gb": mem.total / (1024**3),
+                "ram_available_gb": mem.available / (1024**3),
+                "ram_percent": mem.percent,
+                "python_objects": len(gc.get_objects())
+            }
+            
+            # GPU memory if available
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    stats["gpu_allocated_mb"] = torch.cuda.memory_allocated() / (1024**2)
+                    stats["gpu_reserved_mb"] = torch.cuda.memory_reserved() / (1024**2)
+                    stats["gpu_available"] = True
+                else:
+                    stats["gpu_available"] = False
+            except ImportError:
+                stats["gpu_available"] = False
+            
+            return stats
+            
+        except Exception as e:
+            logger.error(f"Failed to get memory stats: {e}")
+            return {"error": str(e)}

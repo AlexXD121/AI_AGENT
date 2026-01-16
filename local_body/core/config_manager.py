@@ -96,6 +96,13 @@ class SystemConfig(BaseModel):
         description="Tunnel connection timeout in seconds"
     )
     
+    # Security settings
+    access_token: Optional[SecretStr] = Field(
+        default=None,
+        description="Access token for Colab Brain authentication (loaded from env: SOVEREIGN_ACCESS_TOKEN)"
+    )
+    
+    
     # Qdrant settings
     vector_collection: str = Field(
         default="documents",

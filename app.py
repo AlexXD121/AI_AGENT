@@ -304,11 +304,125 @@ def initialize_session_state():
     
     if 'analysis_data' not in st.session_state:
         st.session_state['analysis_data'] = {}
+    
+    if 'system_initialized' not in st.session_state:
+        st.session_state['system_initialized'] = False
+    
+    if 'system_error' not in st.session_state:
+        st.session_state['system_error'] = None
+
+
+def render_maintenance_screen(error):
+    """Render system maintenance screen when startup fails.
+    
+    Args:
+        error: The SovereignError that occurred
+    """
+    st.markdown("# ⚙️ System Maintenance")
+    
+    st.error(f"**Startup Error:** {error.message}")
+    
+    # Show error details if available
+    if hasattr(error, 'details') and error.details:
+        with st.expander("🔍 Error Details"):
+            for key, value in error.details.items():
+                st.text(f"{key}: {value}")
+    
+    # Show appropriate guidance based on error type
+    from local_body.core.exceptions import ResourceError, DependencyError, ConfigurationError
+    
+    if isinstance(error, ResourceError):
+        st.warning("### 💾 Resource Issue Detected")
+        st.markdown("""
+        **Recommended Actions:**
+        1. Close other applications to free up RAM
+        2. Reduce `batch_size` in config.yaml
+        3. Switch to `processing_mode: ocr_only` for lighter processing
+        
+        See the [Configuration Guide](docs/CONFIGURATION_GUIDE.md) for details.
+        """)
+    
+    elif isinstance(error, DependencyError):
+        st.warning("### 🔌 Dependency Not Available")
+        st.markdown("""
+        **Recommended Actions:**
+        1. Start Qdrant: `docker-compose up -d`
+        2. Check Colab Brain connection if using hybrid mode
+        3. Run in local-only mode
+        
+        See the [Installation Guide](docs/INSTALLATION.md) for setup instructions.
+        """)
+    
+    elif isinstance(error, ConfigurationError):
+        st.warning("### ⚙️ Configuration Issue")
+        st.markdown("""
+        **Recommended Actions:**
+        1. Check `config.yaml` exists and is valid
+        2. Verify required environment variables are set
+        3. Review the [Configuration Guide](docs/CONFIGURATION_GUIDE.md)
+        """)
+    
+    # Retry button
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        if st.button("🔄 Retry Startup", type="primary", use_container_width=True):
+            # Clear error state
+            st.session_state['system_initialized'] = False
+            st.session_state['system_error'] = None
+            st.rerun()
 
 
 def main():
     """Main application entry point."""
     initialize_session_state()
+    
+    # STEP 1: SYSTEM BOOTSTRAP
+    # Initialize system before rendering any UI
+    if not st.session_state['system_initialized'] and not st.session_state['system_error']:
+        try:
+            from local_body.core.bootstrap import initialize_system
+            from local_body.core.exceptions import SovereignError
+            
+            # Show temporary loading message
+            with st.spinner("🚀 Initializing Sovereign-Doc..."):
+                # This will raise SovereignError if anything fails
+                config = initialize_system()
+                
+                # Store config in session state for access by components
+                st.session_state['system_config'] = config
+                st.session_state['system_initialized'] = True
+                
+                # Force rerun to show main UI
+                st.rerun()
+                
+        except SovereignError as e:
+            # Capture startup error
+            logger.error(f"System startup failed: {e}")
+            st.session_state['system_error'] = e
+            st.rerun()
+        
+        except Exception as e:
+            # Unexpected error - wrap in StartupError
+            from local_body.core.exceptions import StartupError
+            logger.error(f"Unexpected startup error: {e}")
+            st.session_state['system_error'] = StartupError(
+                f"Unexpected error during startup: {str(e)}",
+                startup_stage="unknown"
+            )
+            st.rerun()
+    
+    # STEP 2: RENDER UI
+    # If system failed to initialize, show maintenance screen
+    if st.session_state['system_error']:
+        render_maintenance_screen(st.session_state['system_error'])
+        return
+    
+    # If still initializing (shouldn't happen due to rerun, but safety check)
+    if not st.session_state['system_initialized']:
+        st.info("Initializing system...")
+        return
+    
+    # System initialized successfully - render normal UI
     
     # Minimal sidebar
     with st.sidebar:
@@ -318,10 +432,12 @@ def main():
         st.markdown("<div class='section-divider'></div>", unsafe_allow_html=True)
         
         if st.session_state['processing_complete']:
-            if st.button("Reset Application", width="stretch"):
-                # Clear all session state
+            if st.button("Reset Application", use_container_width=True):
+                # Clear all session state except system init
+                keys_to_keep = ['system_initialized', 'system_config']
                 for key in list(st.session_state.keys()):
-                    del st.session_state[key]
+                    if key not in keys_to_keep:
+                        del st.session_state[key]
                 st.rerun()
         
         st.markdown("<div class='section-divider'></div>", unsafe_allow_html=True)
@@ -342,3 +458,4 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"Application error: {e}")
         st.error(f"An error occurred: {str(e)}")
+
