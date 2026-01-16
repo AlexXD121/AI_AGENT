@@ -1,26 +1,62 @@
 # Sovereign-Doc - Zero-Cost Privacy-First Document Intelligence System
-# Core dependencies (required)
-pydantic>=2.0.0
-loguru>=0.7.0
-PyYAML>=6.0
-psutil>=5.9.0  # Hardware detection and system monitoring
-gputil>=1.4.0  # GPU monitoring (optional - gracefully degrades if no GPU)
 
-# Core Framework
+# ========================================
+# CORE DEPENDENCIES (Required)
+# ========================================
+
+# Data Validation and Configuration
+pydantic>=2.0.0
 pydantic-settings>=2.0.0
 
+# Logging
+loguru>=0.7.0
+
+# Configuration
+PyYAML>=6.0
+
+# System Monitoring and Resource Management
+psutil>=5.9.0  # RAM, CPU monitoring
+GPUtil>=1.4.0  # GPU monitoring (optional - gracefully degrades)
+pynvml>=11.5.0  # NVIDIA GPU management library
+
+# ========================================
+# WORKFLOW ORCHESTRATION
+# ========================================
+
+# LangGraph for multi-agent workflows
+langgraph>=0.0.20
+
 # Async Support
-asyncio>=3.4.3
+aiofiles>=23.0.0
+
+# ========================================
+# HTTP & NETWORKING
+# ========================================
 
 # HTTP Client
 httpx>=0.25.0
+requests>=2.31.0
 
-# Document Processing
-opencv-python-headless>=4.8.0
-pdf2image>=1.16.0
-pypdf>=3.17.0
+# Secure Tunneling
+pyngrok>=7.0.0  # ngrok tunnel for cloud-local communication
+
+# ========================================
+# DOCUMENT PROCESSING
+# ========================================
+
+# Image Processing
+opencv-python>=4.8.0  # or opencv-python-headless for servers
 Pillow>=10.0.0
 numpy>=1.24.0
+
+# PDF Processing
+pdf2image>=1.16.0
+pypdf>=3.17.0
+PyMuPDF>=1.23.0  # fitz - faster PDF rendering
+
+# ========================================
+# AI/ML MODELS
+# ========================================
 
 # Computer Vision / Layout Analysis
 ultralytics>=8.0.0  # YOLOv8 for document layout detection
@@ -29,28 +65,94 @@ ultralytics>=8.0.0  # YOLOv8 for document layout detection
 paddleocr>=2.7.0  # Text and table extraction
 paddlepaddle>=2.5.0  # PaddleOCR backend (CPU version)
 
-# Transformer Models (for TrOCR handwriting fallback)
-transformers>=4.35.0  # TrOCR model
+# Transformer Models
+transformers>=4.35.0  # TrOCR for handwriting
 torch>=2.0.0  # PyTorch backend (CPU version)
+# For GPU: pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
 
-# Vector Database and Embeddings
-# Note: fastembed requires Python <3.13 due to onnxruntime dependency
-# For Python 3.14+, these should be installed in a compatible environment
+# ========================================
+# VECTOR DATABASE & EMBEDDINGS
+# ========================================
+
 qdrant-client>=1.7.0
-# fastembed>=0.2.0  # Commented out due to Python 3.14 incompatibility
+# fastembed>=0.2.0  # Commented: requires Python <3.13 due to onnxruntime
 
-# Secure Tunneling
-pyngrok>=7.0.0  # ngrok tunnel management for cloud-local communication
+# ========================================
+# TESTING & BENCHMARKING
+# ========================================
 
-# FastAPI (for Cloud Brain server testing)
-fastapi>=0.100.0
-uvicorn>=0.20.0
-python-multipart
-httpx  # Required for FastAPI TestClient
-
-# Testing
+# Testing Framework
 pytest>=8.0.0
 pytest-asyncio>=0.23.0
+pytest-cov>=4.1.0  # Coverage reporting
 
-# UI
+# Accuracy Metrics
+jiwer>=3.0.0  # WER/CER calculation
+shapely>=2.0.0  # IoU calculation for bounding boxes
+scipy>=1.10.0  # Linear sum assignment for table matching
+
+# Benchmarking & Reporting
+pandas>=2.0.0  # Data analysis and report generation
+tabulate>=0.9.0  # Pretty tables
+openpyxl>=3.1.0  # Excel export
+
+# ========================================
+# WEB FRAMEWORK & UI
+# ========================================
+
+# Streamlit UI
 streamlit>=1.30.0
+
+# FastAPI (for Cloud Brain server & API testing)
+fastapi>=0.100.0
+uvicorn[standard]>=0.20.0
+python-multipart>=0.0.6
+
+# ========================================
+# UTILITIES
+# ========================================
+
+# Date/Time
+python-dateutil>=2.8.0
+
+# Progress Bars
+tqdm>=4.66.0
+
+# ========================================
+# OPTIONAL DEPENDENCIES
+# ========================================
+
+# Uncomment if needed:
+# streamlit-extras  # Additional Streamlit components
+# plotly>=5.0.0  # Interactive charts for benchmarks
+# matplotlib>=3.7.0  # Static charts
+# seaborn>=0.12.0  # Statistical visualization
+
+# ========================================
+# DEVELOPMENT DEPENDENCIES (Optional)
+# ========================================
+
+# Code Quality (install separately: pip install -r requirements-dev.txt)
+# black>=23.0.0  # Code formatting
+# flake8>=6.0.0  # Linting
+# mypy>=1.0.0  # Type checking
+# isort>=5.12.0  # Import sorting
+# pylint>=3.0.0  # Advanced linting
+
+# ========================================
+# INSTALLATION NOTES
+# ========================================
+
+# Full Installation:
+#   pip install -r requirements.txt
+
+# Minimal Installation (no ML models):
+#   pip install pydantic loguru pyyaml psutil streamlit langgraph
+
+# GPU Support:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+#   pip install paddlepaddle-gpu
+
+# Testing Suite:
+#   pip install -r requirements.txt
+#   pip install -r tests/requirements-test.txt

@@ -205,54 +205,119 @@ def _render_intelligence_panel(state: Optional[DocumentProcessingState]) -> None
     else:
         st.info("No extracted data available yet. Upload a document to begin processing.")
     
-    # Export button
+    # Action buttons
     st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
-    if st.button("Export Results", type="primary", width="stretch"):
-        st.info("Export functionality: Download as JSON, Excel, or Markdown")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Save to Knowledge Base button (primary action)
+        if st.button("💾 Save to Knowledge Base", type="primary", use_container_width=True):
+            import asyncio
+            from local_body.database.vector_store import DocumentVectorStore
+            
+            try:
+                with st.spinner("Indexing document to vector database..."):
+                    # Get document from state
+                    document = state.get('document') if state else None
+                    
+                    if document:
+                        # Initialize vector store
+                        vector_store = DocumentVectorStore()
+                        
+                        # Ingest document (handle async)
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            loop.run_until_complete(vector_store.ingest_document(document))
+                        finally:
+                            loop.close()
+                        
+                        # Success!
+                        st.toast("✅ Document indexed successfully!", icon="✅")
+                        st.balloons()
+                        st.success(f"Document '{document.file_path}' saved to knowledge base!")
+                    else:
+                        st.error("No document available to save")
+                        
+            except Exception as e:
+                st.error(f"Failed to save to knowledge base: {str(e)}")
+                logger.error(f"Vector store save error: {e}")
+    
+    with col2:
+        # Export button (secondary action)
+        if st.button("📤 Export Results", type="secondary", use_container_width=True):
+            st.info("Export functionality: Download as JSON, Excel, or Markdown")
 
 
 def _render_conflict_cards(state: Optional[DocumentProcessingState]) -> None:
-    """Render conflict resolution cards.
+    """Render conflict resolution cards with REAL conflict data.
     
     Args:
-        state: Processing state
+        state: Processing state with real conflicts from workflow
     """
-    # Mock conflicts for demonstration
-    conflicts = [
-        {
-            'title': 'Discrepancy detected in Table 1',
-            'text_value': '$5,000',
-            'vision_value': '$50,000',
-            'confidence_text': 0.85,
-            'confidence_vision': 0.92
-        },
-        {
-            'title': 'Inconsistent date format',
-            'text_value': '12/31/2023',
-            'vision_value': '2023-12-31',
-            'confidence_text': 0.78,
-            'confidence_vision': 0.88
-        }
-    ]
+    if not state:
+        st.info("No state available")
+        return
     
+    # Get real conflicts from workflow state
+    conflicts = state.get('conflicts', [])
+    
+    if not conflicts:
+        st.success("✅ No conflicts detected - all extractions match!")
+        return
+    
+    st.caption(f"{len(conflicts)} conflict(s) detected")
+    
+    # Render each real conflict
     for idx, conflict in enumerate(conflicts):
+        # Extract conflict properties (handle both object attributes and dict keys)
+        conflict_type = getattr(conflict, 'conflict_type', conflict.get('conflict_type', 'Data Mismatch') if isinstance(conflict, dict) else 'Data Mismatch')
+        impact = getattr(conflict, 'impact_score', conflict.get('impact_score', 0.5) if isinstance(conflict, dict) else 0.5)
+        
+        source_a = getattr(conflict, 'source_a', conflict.get('source_a', 'OCR') if isinstance(conflict, dict) else 'OCR')
+        source_b = getattr(conflict, 'source_b', conflict.get('source_b', 'Vision') if isinstance(conflict, dict) else 'Vision')
+        
+        value_a = str(getattr(conflict, 'value_a', conflict.get('value_a', 'N/A') if isinstance(conflict, dict) else 'N/A'))
+        value_b = str(getattr(conflict, 'value_b', conflict.get('value_b', 'N/A') if isinstance(conflict, dict) else 'N/A'))
+        
+        confidence_a = getattr(conflict, 'confidence_a', conflict.get('confidence_a', 0.0) if isinstance(conflict, dict) else 0.0)
+        confidence_b = getattr(conflict, 'confidence_b', conflict.get('confidence_b', 0.0) if isinstance(conflict, dict) else 0.0)
+        
+        # Determine severity color
+        if impact >= 0.7:
+            title_color = "#EF4444"  # Red - High Impact
+        elif impact >= 0.4:
+            title_color = "#FBBF24"  # Yellow - Medium
+        else:
+            title_color = "#10B981"  # Green - Low
+        
+        # Conflict card header
         st.markdown(f"""
         <div class="conflict-card">
-            <p style="margin: 0; font-weight: 600; color: #FBBF24; font-size: 0.9rem;">
-                {conflict['title']}
+            <p style="margin: 0; font-weight: 600; color: {title_color}; font-size: 0.9rem;">
+                Conflict #{idx + 1}: {conflict_type}
+            </p>
+            <p style="margin: 0.25rem 0 0 0; font-size: 0.75rem; color: #737373;">
+                Impact Score: {impact:.2f}
             </p>
         </div>
         """, unsafe_allow_html=True)
         
-        # Values comparison
+        # Values comparison (side-by-side)
         col1, col2 = st.columns(2)
+        
         with col1:
             st.markdown(f"""
             <div style="padding: 1rem; background: #1F1F1F; border-radius: 0.5rem; border: 1px solid #404040;">
-                <p style="margin: 0; font-size: 0.75rem; color: #737373; text-transform: uppercase; letter-spacing: 0.05em;">Text reads</p>
-                <p style="margin: 0.5rem 0 0 0; font-weight: 700; color: #FFFFFF; font-size: 1.125rem;">{conflict['text_value']}</p>
+                <p style="margin: 0; font-size: 0.75rem; color: #737373; text-transform: uppercase; letter-spacing: 0.05em;">
+                    {source_a}
+                </p>
+                <p style="margin: 0.5rem 0 0 0; font-weight: 700; color: #FFFFFF; font-size: 1.125rem;">
+                    {value_a}
+                </p>
                 <p style="margin: 0.5rem 0 0 0; font-size: 0.75rem; color: #10B981;">
-                    {conflict['confidence_text']:.0%} confidence
+                    {confidence_a:.0%} confidence
                 </p>
             </div>
             """, unsafe_allow_html=True)
@@ -260,29 +325,54 @@ def _render_conflict_cards(state: Optional[DocumentProcessingState]) -> None:
         with col2:
             st.markdown(f"""
             <div style="padding: 1rem; background: #1F1F1F; border-radius: 0.5rem; border: 1px solid #404040;">
-                <p style="margin: 0; font-size: 0.75rem; color: #737373; text-transform: uppercase; letter-spacing: 0.05em;">Vision sees</p>
-                <p style="margin: 0.5rem 0 0 0; font-weight: 700; color: #FFFFFF; font-size: 1.125rem;">{conflict['vision_value']}</p>
+                <p style="margin: 0; font-size: 0.75rem; color: #737373; text-transform: uppercase; letter-spacing: 0.05em;">
+                    {source_b}
+                </p>
+                <p style="margin: 0.5rem 0 0 0; font-weight: 700; color: #FFFFFF; font-size: 1.125rem;">
+                    {value_b}
+                </p>
                 <p style="margin: 0.5rem 0 0 0; font-size: 0.75rem; color: #3B82F6;">
-                    {conflict['confidence_vision']:.0%} confidence
+                    {confidence_b:.0%} confidence
                 </p>
             </div>
             """, unsafe_allow_html=True)
+        
+        # Check for resolution
+        resolutions = state.get('resolutions', [])
+        conflict_id = getattr(conflict, 'id', conflict.get('id', None) if isinstance(conflict, dict) else None)
+        
+        if conflict_id and resolutions:
+            # Find matching resolution
+            resolution = next(
+                (r for r in resolutions 
+                 if (getattr(r, 'conflict_id', None) == conflict_id or 
+                     (isinstance(r, dict) and r.get('conflict_id') == conflict_id))),
+                None
+            )
+            
+            if resolution:
+                chosen_value = getattr(resolution, 'chosen_value', resolution.get('chosen_value', 'N/A') if isinstance(resolution, dict) else 'N/A')
+                method = getattr(resolution, 'resolution_method', resolution.get('resolution_method', 'auto') if isinstance(resolution, dict) else 'auto')
+                
+                st.success(f"✓ Resolved ({method}): {chosen_value}")
         
         # Action buttons
         btn_col1, btn_col2 = st.columns(2)
         with btn_col1:
             st.button(
-                "Accept Text",
-                key=f"accept_text_{idx}",
+                f"Accept {source_a}",
+                key=f"accept_a_{idx}",
                 type="secondary",
-                width='stretch'
-            )
-        with btn_col2:
-            st.button(
-                "Accept Vision",
-                key=f"accept_vision_{idx}",
-                type="primary",
-                width='stretch'
+                use_container_width=True
             )
         
-        st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
+        with btn_col2:
+            st.button(
+                f"Accept {source_b}",
+                key=f"accept_b_{idx}",
+                type="primary",
+                use_container_width=True
+            )
+        
+        st.markdown("<div style='margin-bottom: 1.5rem;'></div>", unsafe_allow_html=True)
+
