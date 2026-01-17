@@ -47,6 +47,10 @@ class DocumentProcessingState(TypedDict):
     
     # Error tracking (reducer)
     error_log: Annotated[List[str], add]  # Concatenate errors
+    
+    # Global error state (single value - last writer wins)
+    error_message: Optional[str]  # Human-readable error description
+    traceback_info: Optional[str]  # Full Python traceback for debugging
 
 
 # Processing stage constants

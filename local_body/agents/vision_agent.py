@@ -194,6 +194,13 @@ class VisionAgent(BaseAgent):
         from local_body.core.security import get_security_manager
         security_mgr = get_security_manager()
         
+        # Early check: If no access token, switch to local mode immediately
+        try:
+            auth_header = security_mgr.get_auth_header()
+        except ValueError:
+            logger.info("Remote Brain access token not found. Switching to Local Vision Model.")
+            raise ConnectionError("Access token not configured")
+        
         # Check if requests should be blocked due to security
         if security_mgr.should_block_request():
             raise ConnectionError("Requests blocked due to security concerns")
@@ -216,14 +223,9 @@ class VisionAgent(BaseAgent):
                         'Authorization': f'Bearer {self.api_key}',  # Legacy API key (backward compat)
                     }
                     
-                    # Add security token for authentication
-                    try:
-                        auth_header = security_mgr.get_auth_header()
-                        headers.update(auth_header)
-                    except ValueError as e:
-                        logger.info("Access token not configured. Switching to Local Mode.")
-                        # Allow fallback to local in this case
-                        raise ConnectionError("Access token not configured")
+                    
+                    # Use the auth header we already validated earlier
+                    headers.update(auth_header)
                     
                     response = await client.post(endpoint, files=files, data=data, headers=headers)
                     

@@ -22,116 +22,139 @@ def render_analysis_dashboard(state: Optional[DocumentProcessingState]) -> None:
     Args:
         state: Current processing state
     """
-    # 1. Header & Global Actions
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        doc_name = st.session_state.get('document_name', 'Document')
-        st.markdown(f"## {doc_name}")
-    with col2:
-        if st.button("New Document", type="secondary", width="stretch"):
-            st.session_state['processing_complete'] = False
-            st.rerun()
-    
-    st.divider()
-
-    # Debug: Check if state exists
-    if not state:
-        st.error("No processing state found. Please re-upload your document.")
-        logger.error("Dashboard called with None state!")
-        return
-
-    # Get analysis data
-    analysis_data = st.session_state.get('analysis_data', {})
-
-
-    # 2. Top Level Metrics (KPIs)
-    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-    
-    # KPI 1: Confidence
-    confidence = analysis_data.get('confidence', 0.0)
-    conf_delta = "High Confidence" if confidence > 0.8 else "Review Needed"
-    conf_color = "normal" if confidence > 0.8 else "inverse"
-    
-    kpi1.metric("Avg Confidence", f"{confidence:.1%}", conf_delta)
-
-    # KPI 2: Pages
-    pages = analysis_data.get('total_pages', len(state.get('document', {}).pages) if state.get('document') and hasattr(state.get('document'), 'pages') else 0)
-    kpi2.metric("Pages Processed", pages)
-
-    # KPI 3: Conflicts
-    conflicts_count = len(state.get('conflicts', []))
-    conflict_delta = f"{conflicts_count} active"
-    kpi3.metric("Conflicts Detected", conflicts_count, conflict_delta, delta_color="inverse")
-
-    # KPI 4: Regions
-    regions = analysis_data.get('total_regions', 0)
-    kpi4.metric("Extracted Fields", regions)
-
-    st.markdown("<div style='margin-bottom: 2rem;'></div>", unsafe_allow_html=True)
-
-    # 3. Main Tabbed Interface
-    tab_summary, tab_conflicts, tab_viewer, tab_analytics, tab_data = st.tabs([
-        "Executive Summary", 
-        "Conflict Resolution", 
-        "Document Viewer",
-        "Analytics",
-        "Raw Data"
-    ])
-
-    # --- TAB 1: EXECUTIVE SUMMARY ---
-    with tab_summary:
-        st.markdown("### Document Summary")
+    try:
+        logger.info("=== DASHBOARD RENDER STARTED ===")
+        logger.info(f"State type: {type(state)}, State is dict: {isinstance(state, dict)}")
         
-        # Summary Content (extracted text preview)
-        document = state.get('document')
-        if document and hasattr(document, 'text') and document.text:
-            text_preview = document.text[:1000] + "..." if len(document.text) > 1000 else document.text
-            st.text_area("Extracted Text Content", text_preview, height=200)
-        else:
-            st.info("No text content extracted available for summary.")
-
-        st.markdown("### Key Extractions")
+        if state and isinstance(state, dict):
+            logger.info(f"State keys: {list(state.keys())[:10]}")  # First 10 keys
         
-        # Extracted Data Table
-        if document and hasattr(document, 'pages'):
-             # Reuse extraction logic
-            extracted_items = []
-            for page in document.pages:
-                for region in page.regions:
-                    if hasattr(region, 'content'):
-                        val = region.content.text if hasattr(region.content, 'text') else (f"Table ({len(region.content.rows)} rows)" if hasattr(region.content, 'rows') else "")
-                        if val:
-                            extracted_items.append({
-                                "Page": page.page_number,
-                                "Content": val[:100],
-                                "Confidence": f"{region.confidence:.1%}" if hasattr(region, 'confidence') else "N/A"
-                            })
+        # 1. Header and Global Actions
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            doc_name = st.session_state.get('document_name', 'Document')
+            st.markdown(f"## {doc_name}")
+        with col2:
+            if st.button("New Document", type="secondary", width="stretch"):
+                st.session_state['processing_complete'] = False
+                st.rerun()
+        
+        st.divider()
+
+        # Debug: Check if state exists
+        if not state:
+            st.error("No processing state found. Please re-upload your document.")
+            logger.error("Dashboard called with None/empty state!")
+            return
+
+        logger.info("Rendering KPIs...")
+        
+        # Get analysis data
+        analysis_data = st.session_state.get('analysis_data', {})
+        logger.info(f"Analysis data: {len(analysis_data)} keys")
+
+        # 2. Top Level Metrics (KPIs)
+        kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+        
+        # KPI 1: Confidence
+        confidence = analysis_data.get('confidence', 0.0)
+        conf_delta = "High Confidence" if confidence > 0.8 else "Review Needed"
+        conf_color = "normal" if confidence > 0.8 else "inverse"
+        
+        kpi1.metric("Avg Confidence", f"{confidence:.1%}", conf_delta)
+
+        # KPI 2: Pages
+        pages = analysis_data.get('total_pages', len(state.get('document', {}).pages) if state.get('document') and hasattr(state.get('document'), 'pages') else 0)
+        kpi2.metric("Pages Processed", pages)
+
+        # KPI 3: Conflicts
+        conflicts_count = len(state.get('conflicts', []))
+        conflict_delta = f"{conflicts_count} active"
+        kpi3.metric("Conflicts Detected", conflicts_count, conflict_delta, delta_color="inverse")
+
+        # KPI 4: Regions
+        regions = analysis_data.get('total_regions', 0)
+        kpi4.metric("Extracted Fields", regions)
+
+        st.markdown("<div style='margin-bottom: 2rem;'></div>", unsafe_allow_html=True)
+
+        logger.info("Rendering tabs...")
+        
+        # 3. Main Tabbed Interface
+        tab_summary, tab_conflicts, tab_viewer, tab_analytics, tab_data = st.tabs([
+            "Executive Summary", 
+            "Conflict Resolution", 
+            "Document Viewer",
+            "Analytics",
+            "Raw Data"
+        ])
+
+        # --- TAB 1: EXECUTIVE SUMMARY ---
+        with tab_summary:
+            logger.info("Rendering summary tab...")
+            st.markdown("### Document Summary")
             
-            if extracted_items:
-                st.dataframe(extracted_items, width="stretch")
+            # Summary Content (extracted text preview)
+            document = state.get('document')
+            if document and hasattr(document, 'text') and document.text:
+                text_preview = document.text[:1000] + "..." if len(document.text) > 1000 else document.text
+                st.text_area("Extracted Text Content", text_preview, height=200)
             else:
-                st.caption("No specific fields extracted.")
+                st.info("No text content extracted available for summary.")
 
-    # --- TAB 2: CONFLICT RESOLUTION ---
-    with tab_conflicts:
-         # Use the dedicated conflict panel component we optimized
-         doc_id = document.id if document and hasattr(document, 'id') else "unknown"
-         conflicts = state.get('conflicts', [])
-         
-         render_conflict_panel(doc_id, conflicts=conflicts)
+            st.markdown("### Key Extractions")
+            
+            # Extracted Data Table
+            if document and hasattr(document, 'pages'):
+                 # Reuse extraction logic
+                extracted_items = []
+                for page in document.pages:
+                    for region in page.regions:
+                        if hasattr(region, 'content'):
+                            val = region.content.text if hasattr(region.content, 'text') else (f"Table ({len(region.content.rows)} rows)" if hasattr(region.content, 'rows') else "")
+                            if val:
+                                extracted_items.append({
+                                    "Page": page.page_number,
+                                    "Content": val[:100],
+                                    "Confidence": f"{region.confidence:.1%}" if hasattr(region, 'confidence') else "N/A"
+                                })
+                
+                if extracted_items:
+                    st.dataframe(extracted_items, width="stretch")
+                else:
+                    st.caption("No specific fields extracted.")
 
-    # --- TAB 3: DOCUMENT VIEWER ---
-    with tab_viewer:
-        _render_document_viewer_tab(state)
+        # --- TAB 2: CONFLICT RESOLUTION ---
+        with tab_conflicts:
+            logger.info("Rendering conflicts tab...")
+             # Use the dedicated conflict panel component we optimized
+             doc_id = document.id if document and hasattr(document, 'id') else "unknown"
+             conflicts = state.get('conflicts', [])
+             
+             render_conflict_panel(doc_id, conflicts=conflicts)
 
-    # --- TAB 4: ANALYTICS ---
-    with tab_analytics:
-        _render_analytics_tab(state)
+        # --- TAB 3: DOCUMENT VIEWER ---
+        with tab_viewer:
+            logger.info("Rendering viewer tab...")
+            _render_document_viewer_tab(state)
 
-    # --- TAB 5: RAW DATA ---
-    with tab_data:
-        st.markdown("### System State Inspection")
-        st.json(state, expanded=False)
+        # --- TAB 4: ANALYTICS ---
+        with tab_analytics:
+            logger.info("Rendering analytics tab...")
+            _render_analytics_tab(state)
+
+        # --- TAB 5: RAW DATA ---
+        with tab_data:
+            logger.info("Rendering raw data tab...")
+            st.markdown("### System State Inspection")
+            st.json(state, expanded=False)
+        
+        logger.info("=== DASHBOARD RENDER COMPLETE ===")
+        
+    except Exception as e:
+        logger.exception(f"Dashboard rendering failed: {e}")
+        st.error(f"Error rendering dashboard: {e}")
+        st.expander("Error Details").code(str(e))
 
 
 def _render_document_viewer_tab(state: Dict[str, Any]):
@@ -184,7 +207,7 @@ def _render_analytics_tab(state: Dict[str, Any]):
         return
     
     # === GRAPH A: Content Composition (Donut Chart) ===
-    st.markdown("#### Content Composition")
+    st.markdown("####Content Composition")
     
     if hasattr(document, 'pages') and document.pages:
         # Count region types across all pages

@@ -20,6 +20,7 @@ from local_body.orchestration.state import DocumentProcessingState, ProcessingSt
 from local_body.core.config_manager import ConfigManager, SystemConfig
 from local_body.core.cache import get_cached_result, cache_document_stage
 from local_body.utils.model_manager import ModelManager
+from local_body.utils.decorators import safe_node_execution
 
 
 # Agent singleton cache
@@ -88,6 +89,7 @@ def _get_model_manager(config: SystemConfig) -> ModelManager:
 
 # ==================== ASYNC WORKFLOW NODES ====================
 
+@safe_node_execution("layout_node")
 async def layout_node(state: DocumentProcessingState) -> Dict[str, Any]:
     """Process document with layout detection (YOLOv8).
     
@@ -177,6 +179,7 @@ async def layout_node(state: DocumentProcessingState) -> Dict[str, Any]:
         }
 
 
+@safe_node_execution("ocr_node")
 async def ocr_node(state: DocumentProcessingState) -> Dict[str, Any]:
     """Process document with OCR (PaddleOCR).
     
@@ -269,6 +272,7 @@ async def ocr_node(state: DocumentProcessingState) -> Dict[str, Any]:
         }
 
 
+@safe_node_execution("vision_node")
 async def vision_node(state: DocumentProcessingState) -> Dict[str, Any]:
     """Process document with vision model (Qwen-VL).
     
@@ -358,6 +362,7 @@ async def vision_node(state: DocumentProcessingState) -> Dict[str, Any]:
         }
 
 
+@safe_node_execution("validation_node")
 def validation_node(state: DocumentProcessingState) -> Dict[str, Any]:
     """Validate OCR vs Vision results and detect conflicts.
     

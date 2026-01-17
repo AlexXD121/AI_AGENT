@@ -271,10 +271,12 @@ async def _process_document(uploaded_file) -> None:
         st.session_state['processing_failed'] = False
         
         logger.info(f"Analysis complete: {len(result_state.get('conflicts', []))} conflicts detected")
+        logger.info(f"Session state updated: processing_complete=True, current_state exists={('current_state' in st.session_state)}")
         
         # Success feedback
         st.toast("Analysis Complete!")
         time.sleep(0.5)
+        logger.info("Triggering rerun to show dashboard...")
         st.rerun()
         
     except Exception as e:

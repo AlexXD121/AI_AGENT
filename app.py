@@ -467,10 +467,17 @@ def main():
         st.caption("Privacy-First AI")
     
     # Main content routing
-    if not st.session_state['processing_complete']:
+    processing_complete = st.session_state.get('processing_complete', False)
+    logger.info(f"App routing: processing_complete={processing_complete}")
+    
+    if not processing_complete:
+        logger.info("Rendering upload hero")
         render_upload_hero()
     else:
-        render_analysis_dashboard(st.session_state['current_state'])
+        logger.info("Rendering analysis dashboard")
+        current_state = st.session_state.get('current_state')
+        logger.info(f"Current state type: {type(current_state)}")
+        render_analysis_dashboard(current_state)
 
 
 if __name__ == "__main__":

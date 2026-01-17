@@ -149,8 +149,13 @@ class OCRAgent(BaseAgent):
         """Execute 3-Stage Adaptive Retry Pipeline."""
         
         # --- Stage 1: Standard OCR ---
-        result1 = self._run_ocr(crop_bytes)
-        text, conf = self._parse_ocr_result(result1)
+        try:
+            result1 = self._run_ocr(crop_bytes)
+            text, conf = self._parse_ocr_result(result1)
+        except (NotImplementedError, ImportError, Exception) as e:
+            # PaddleOCR failed - log quietly and return empty for fallback
+            logger.warning(f"PaddleOCR failed for region {region_id}: {type(e).__name__}. Triggering fallback.")
+            return "", 0.0
         
         if conf >= self.confidence_threshold:
             return text, conf

@@ -108,34 +108,81 @@ def safe_node_execution(node_name: str):
         Decorator function
     """
     def decorator(func: Callable) -> Callable:
-        @functools.wraps(func)
-        async def wrapper(state: dict, *args, **kwargs):
-            try:
-                logger.info(f"Executing node: {node_name}")
-                result = await func(state, *args, **kwargs)
-                logger.success(f"Node {node_name} completed successfully")
-                return result
-                
-            except Exception as e:
-                # Log full traceback
-                logger.exception(f"Node {node_name} FAILED with {type(e).__name__}: {e}")
-                
-                # Update state with error information
-                error_log = state.get('error_log', [])
-                error_log.append({
-                    'node': node_name,
-                    'error': str(e),
-                    'type': type(e).__name__
-                })
-                
-                # Return failed state (preserve existing data)
-                return {
-                    **state,  # Preserve all existing state
-                    'processing_stage': 'FAILED',
-                    'error': f"{node_name} failed: {str(e)}",
-                    'error_log': error_log,
-                    'failed_node': node_name
-                }
+        import inspect
         
-        return wrapper
+        if inspect.iscoroutinefunction(func):
+            # Async wrapper for async nodes
+            @functools.wraps(func)
+            async def async_wrapper(state: dict, *args, **kwargs):
+                try:
+                    logger.info(f"Executing node: {node_name}")
+                    result = await func(state, *args, **kwargs)
+                    logger.success(f"Node {node_name} completed successfully")
+                    return result
+                    
+                except Exception as e:
+                    # Capture full traceback
+                    import traceback
+                    error_msg = f"Node '{node_name}' failed: {str(e)}"
+                    traceback_str = traceback.format_exc()
+                    
+                    logger.error(error_msg, exc_info=True)
+                    
+                    # Update state with error information
+                    error_log = state.get('error_log', [])
+                    error_log.append({
+                        'node': node_name,
+                        'error': str(e),
+                        'type': type(e).__name__
+                    })
+                    
+                    # Mark state as failed instead of crashing
+                    return {
+                        **state,  # Preserve all existing state
+                        'processing_stage': 'FAILED',
+                        'error_message': error_msg,
+                        'traceback_info': traceback_str,
+                        'error_log': error_log,
+                        'failed_node': node_name
+                    }
+            
+            return async_wrapper
+        else:
+            # Sync wrapper for sync nodes (like validation_node)
+            @functools.wraps(func)
+            def sync_wrapper(state: dict, *args, **kwargs):
+                try:
+                    logger.info(f"Executing node: {node_name}")
+                    result = func(state, *args, **kwargs)
+                    logger.success(f"Node {node_name} completed successfully")
+                    return result
+                    
+                except Exception as e:
+                    # Capture full traceback
+                    import traceback
+                    error_msg = f"Node '{node_name}' failed: {str(e)}"
+                    traceback_str = traceback.format_exc()
+                    
+                    logger.error(error_msg, exc_info=True)
+                    
+                    # Update state with error information
+                    error_log = state.get('error_log', [])
+                    error_log.append({
+                        'node': node_name,
+                        'error': str(e),
+                        'type': type(e).__name__
+                    })
+                    
+                    # Mark state as failed instead of crashing
+                    return {
+                        **state,  # Preserve all existing state
+                        'processing_stage': 'FAILED',
+                        'error_message': error_msg,
+                        'traceback_info': traceback_str,
+                        'error_log': error_log,
+                        'failed_node': node_name
+                    }
+            
+            return sync_wrapper
+            
     return decorator
