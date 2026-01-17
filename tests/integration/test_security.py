@@ -25,9 +25,11 @@ class TestTunnelSecurity:
     def test_tunnel_encryption_enforced(self):
         """Verify that tunnel enforces HTTPS."""
         from local_body.tunnel.secure_tunnel import SecureTunnel
+        from local_body.core.config_manager import SystemConfig
         
-        # Initialize tunnel
-        tunnel = SecureTunnel()
+        # Initialize tunnel with config
+        config = SystemConfig()
+        tunnel = SecureTunnel(config=config)
         
         # Check that configuration requires HTTPS
         # This depends on actual SecureTunnel implementation
@@ -65,8 +67,10 @@ class TestTunnelSecurity:
     def test_tunnel_auth_configuration(self):
         """Test that tunnel can be configured with authentication."""
         from local_body.tunnel.secure_tunnel import SecureTunnel
+        from local_body.core.config_manager import SystemConfig
         
-        tunnel = SecureTunnel()
+        config = SystemConfig()
+        tunnel = SecureTunnel(config=config)
         
         # Check if tunnel supports auth
         # This is a placeholder for actual auth configuration

@@ -68,7 +68,7 @@ class SecureTunnel:
         
         # Fallback to environment variable
         if not token:
-            token = os.getenv('NGROK_AUTH_TOKEN') or os.getenv('SOVEREIGN_NGROK_TOKEN')
+            token = os.getenv('NGROK_TOKEN') or os.getenv('NGROK_AUTH_TOKEN') or os.getenv('SOVEREIGN_NGROK_TOKEN')
         
         return token
     

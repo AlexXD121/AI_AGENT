@@ -3,6 +3,10 @@
 Main Streamlit application with sleek dark theme.
 """
 
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
+
 import streamlit as st
 from loguru import logger
 

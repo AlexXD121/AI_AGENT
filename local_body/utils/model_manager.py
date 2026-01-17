@@ -323,6 +323,14 @@ class ModelManager:
             logger.success(f"Model {model_name} fully unloaded from memory")
             return True
             
+        except (httpx.ConnectError, httpx.TimeoutException) as e:
+            # Ollama service is offline/unreachable - this is expected and not an error
+            logger.warning(f"Could not unload model {model_name}: Ollama service unreachable (not running)")
+            # Still run garbage collection
+            import gc
+            gc.collect()
+            return False
+            
         except Exception as e:
             logger.error(f"Failed to unload model {model_name}: {e}")
             return False

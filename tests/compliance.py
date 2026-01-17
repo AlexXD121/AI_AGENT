@@ -234,7 +234,7 @@ class RequirementsChecker:
             return ComplianceStatus.FAIL, "Privacy manager missing"
         
         # Check for privacy modes
-        content = Path("local_body/core/privacy.py").read_text()
+        content = Path("local_body/core/privacy.py").read_text(encoding='utf-8')
         if "PrivacyMode" in content and "STRICT" in content:
             checks.append("Privacy modes implemented")
         else:
@@ -247,7 +247,7 @@ class RequirementsChecker:
         if not Path("local_body/core/logging_setup.py").exists():
             return ComplianceStatus.FAIL, "Logging setup missing"
         
-        content = Path("local_body/core/logging_setup.py").read_text()
+        content = Path("local_body/core/logging_setup.py").read_text(encoding='utf-8')
         
         if "redact_pii" in content and "filter" in content.lower():
             return ComplianceStatus.PASS, "PII redaction filter implemented"
@@ -259,7 +259,7 @@ class RequirementsChecker:
         if not Path("local_body/utils/file_utils.py").exists():
             return ComplianceStatus.FAIL, "File utils missing"
         
-        content = Path("local_body/utils/file_utils.py").read_text()
+        content = Path("local_body/utils/file_utils.py").read_text(encoding='utf-8')
         
         if "secure_delete" in content and "overwrite" in content.lower():
             return ComplianceStatus.PASS, "Secure deletion implemented"
@@ -272,13 +272,13 @@ class RequirementsChecker:
         
         # Check security.py
         if Path("local_body/core/security.py").exists():
-            content = Path("local_body/core/security.py").read_text()
+            content = Path("local_body/core/security.py").read_text(encoding='utf-8')
             if "access_token" in content and "validate_token" in content:
                 checks.append("Local auth implemented")
         
         # Check server.py
         if Path("colab_brain/server.py").exists():
-            content = Path("colab_brain/server.py").read_text()
+            content = Path("colab_brain/server.py").read_text(encoding='utf-8')
             if "verify_token" in content and "X-Sovereign-Token" in content:
                 checks.append("Server auth implemented")
         
@@ -292,7 +292,7 @@ class RequirementsChecker:
         if not Path("local_body/tunnel/secure_tunnel.py").exists():
             return ComplianceStatus.FAIL, "Secure tunnel missing"
         
-        content = Path("local_body/tunnel/secure_tunnel.py").read_text()
+        content = Path("local_body/tunnel/secure_tunnel.py").read_text(encoding='utf-8')
         
         if "bind_tls=True" in content:
             return ComplianceStatus.PASS, "HTTPS enforcement confirmed"
@@ -321,7 +321,7 @@ class RequirementsChecker:
         if not Path("local_body/orchestration/workflow.py").exists():
             return ComplianceStatus.FAIL, "Workflow missing"
         
-        content = Path("local_body/orchestration/workflow.py").read_text()
+        content = Path("local_body/orchestration/workflow.py").read_text(encoding='utf-8')
         
         if "StateGraph" in content and "DocumentProcessingState" in content:
             return ComplianceStatus.PASS, "LangGraph workflow implemented"
@@ -333,7 +333,7 @@ class RequirementsChecker:
         if not Path("local_body/core/cache.py").exists():
             return ComplianceStatus.FAIL, "Cache manager missing"
         
-        content = Path("local_body/core/cache.py").read_text()
+        content = Path("local_body/core/cache.py").read_text(encoding='utf-8')
         
         if "CacheManager" in content and "diskcache" in content:
             return ComplianceStatus.PASS, "Persistent caching implemented"
@@ -345,7 +345,7 @@ class RequirementsChecker:
         if not Path("local_body/utils/model_manager.py").exists():
             return ComplianceStatus.FAIL, "Model manager missing"
         
-        content = Path("local_body/utils/model_manager.py").read_text()
+        content = Path("local_body/utils/model_manager.py").read_text(encoding='utf-8')
         
         if "optimize_resources" in content and "unload_model" in content:
             return ComplianceStatus.PASS, "Resource optimization implemented"
@@ -357,7 +357,7 @@ class RequirementsChecker:
         if not Path("local_body/core/health.py").exists():
             return ComplianceStatus.FAIL, "Health monitor missing"
         
-        content = Path("local_body/core/health.py").read_text()
+        content = Path("local_body/core/health.py").read_text(encoding='utf-8')
         
         if "SystemMonitor" in content and "check_resources" in content:
             return ComplianceStatus.PASS, "Health monitoring implemented"
@@ -369,7 +369,7 @@ class RequirementsChecker:
         if not Path("local_body/core/alerts.py").exists():
             return ComplianceStatus.FAIL, "Alert system missing"
         
-        content = Path("local_body/core/alerts.py").read_text()
+        content = Path("local_body/core/alerts.py").read_text(encoding='utf-8')
         
         if "AlertManager" in content and "AlertComponent" in content:
             return ComplianceStatus.PASS, "Alert system implemented"

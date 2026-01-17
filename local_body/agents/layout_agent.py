@@ -116,7 +116,12 @@ class LayoutAgent(BaseAgent):
             # Run YOLO inference
             try:
                 results = self.model(image, verbose=False)
-                regions = self._extract_regions(results[0], page.page_number)
+                regions = self._extract_regions(results[0], page.page_number, image.shape)
+                
+                # Full-page fallback if no regions detected
+                if len(regions) == 0:
+                    logger.warning(f"No layout regions detected on page {page.page_number}. Falling back to full-page processing.")
+                    regions = self._create_full_page_region(image.shape, page.page_number)
                 
                 # Update page regions
                 page.regions.extend(regions)
@@ -152,7 +157,7 @@ class LayoutAgent(BaseAgent):
         
         return image_bgr
     
-    def _extract_regions(self, result, page_number: int) -> List[Region]:
+    def _extract_regions(self, result, page_number: int, image_shape: tuple) -> List[Region]:
         """Extract regions from YOLO detection results.
         
         Args:
@@ -226,6 +231,38 @@ class LayoutAgent(BaseAgent):
             )
         
         return regions
+    
+    def _create_full_page_region(self, image_shape: tuple, page_number: int) -> List[Region]:
+        """Create a full-page TEXT region as fallback when no regions detected.
+        
+        Args:
+            image_shape: Shape of the image (height, width, channels)
+            page_number: Page number for logging
+            
+        Returns:
+            List containing a single full-page region
+        """
+        height, width = image_shape[:2]
+        
+        bbox = BoundingBox(
+            x=0.0,
+            y=0.0,
+            width=float(width),
+            height=float(height)
+        )
+        
+        content = TextContent(text="", confidence=1.0)
+        
+        region = Region(
+            bbox=bbox,
+            region_type=RegionType.TEXT,
+            content=content,
+            confidence=1.0,
+            extraction_method="fullpage_fallback"
+        )
+        
+        logger.info(f"Created full-page region for page {page_number} ({width}x{height})")
+        return [region]
     
     def draw_layout(self, image_bytes: bytes, regions: List[Region]) -> bytes:
         """Draw bounding boxes on image for visualization.

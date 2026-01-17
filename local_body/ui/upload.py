@@ -63,7 +63,8 @@ def render_upload_hero() -> None:
             if check_system_ready_for_processing():
                 # System is healthy - show button and allow processing
                 if st.button("Analyze Document", type="primary", use_container_width=True):
-                    _process_document(uploaded_file)
+                    import asyncio
+                    asyncio.run(_process_document(uploaded_file))
             else:
                 # System not ready - button disabled, error already shown by check function
                 st.button(
@@ -136,7 +137,7 @@ def _render_system_status() -> None:
         pass  # Silently fail if hardware detection unavailable
 
 
-def _process_document(uploaded_file) -> None:
+async def _process_document(uploaded_file) -> None:
     """Process uploaded document using multi-agent workflow.
     
     This function integrates the LangGraph DocumentWorkflow backend with
@@ -176,7 +177,7 @@ def _process_document(uploaded_file) -> None:
             document = loader.load_document(tmp_path)
             st.session_state['document_name'] = uploaded_file.name
             
-            logger.info(f"Document loaded: {document.file_id}, {len(document.pages)} pages")
+            logger.info(f"Document loaded: {document.id}, {len(document.pages)} pages")
         
         # Stage 2: Prepare initial workflow state
         status_placeholder.info("🔧 Preparing processing pipeline...")
@@ -221,7 +222,7 @@ def _process_document(uploaded_file) -> None:
             progress_placeholder.progress(0.85)
             
             # Run the workflow
-            result_state = workflow.run(initial_state)
+            result_state = await workflow.run(initial_state)
             
             logger.success(f"Workflow completed: stage={result_state.get('processing_stage')}")
         
@@ -280,11 +281,11 @@ def _process_document(uploaded_file) -> None:
         st.session_state['processing_complete'] = False
     
     finally:
-        # Cleanup temp file
-        try:
-            Path(tmp_path).unlink(missing_ok=True)
-        except Exception as e:
-            logger.warning(f"Failed to delete temp file: {e}")
+        # Store temp file path for viewer - DON'T delete yet
+        # The viewer needs this file to display pages
+        if 'temp_file_path' not in st.session_state:
+            st.session_state['temp_file_path'] = tmp_path
+        # Cleanup will happen when user resets or session ends
 
 
 def _extract_analysis_metrics(state: dict) -> dict:

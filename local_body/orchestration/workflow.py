@@ -125,7 +125,7 @@ class DocumentWorkflow:
         logger.info("Workflow graph compiled successfully")
         return workflow.compile()
     
-    def run(self, state: DocumentProcessingState) -> DocumentProcessingState:
+    async def run(self, state: DocumentProcessingState) -> DocumentProcessingState:
         """Execute workflow on document.
         
         Args:
@@ -141,8 +141,8 @@ class DocumentWorkflow:
             # Save initial checkpoint
             self.checkpoint_manager.save_checkpoint(doc_id, state)
             
-            # Run workflow
-            result = self.graph.invoke(state)
+            # Run workflow asynchronously
+            result = await self.graph.ainvoke(state)
             
             # Save final checkpoint
             self.checkpoint_manager.save_checkpoint(doc_id, result)
