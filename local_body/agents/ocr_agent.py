@@ -9,11 +9,13 @@ This module implements the OCRAgent class with a 3-stage adaptive retry pipeline
 import io
 import re
 from typing import Any, Dict, List, Optional, Tuple
+from pathlib import Path
 
 import cv2
 import numpy as np
 from loguru import logger
 from PIL import Image
+from pypdf import PdfReader
 
 try:
     from paddleocr import PaddleOCR
@@ -128,8 +130,18 @@ class OCRAgent(BaseAgent):
                     logger.debug(f"Region {region.id} extracted: {confidence:.1%}")
                     
                 except Exception as e:
-                    logger.error(f"Region {region.id} failed: {e}")
-                    region.content = TextContent(text="", confidence=0.0)
+                    # Fallback: Try PyPDF2 text extraction when OCR fails
+                    logger.warning(f"Region {region.id}: OCR failed ({type(e).__name__}). Attempting PyPDF2 fallback...")
+                    text = self._extract_text_pypdf2(document.file_path, page.page_number)
+                    
+                    if text and len(text.strip()) > 0:
+                        confidence = 0.95
+                        logger.success(f"Region {region.id}: Extracted {len(text)} chars via PyPDF2")
+                        region.content = TextContent(text=text, confidence=confidence)
+                    else:
+                        # No fallback available
+                        logger.warning(f"Region {region.id}: PyPDF2 fallback also failed - no text extracted")
+                        region.content = TextContent(text="", confidence=0.0)
         
         return document
 
@@ -203,7 +215,7 @@ class OCRAgent(BaseAgent):
     def _run_ocr(self, image_bytes: bytes) -> List:
         nparr = np.frombuffer(image_bytes, np.uint8)
         image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        return self.ocr.ocr(image, cls=True)
+        return self.ocr.ocr(image)
 
     def _parse_ocr_result(self, ocr_result: List) -> Tuple[str, float]:
         if not ocr_result or not ocr_result[0]: 
@@ -248,3 +260,36 @@ class OCRAgent(BaseAgent):
             return value
         except (ValueError, AttributeError):
             return None
+    
+    def _extract_text_pypdf2(self, pdf_path: str, page_number: int) -> str:
+        """Extract text from PDF using PyPDF2 as fallback when OCR fails.
+        
+        Args:
+            pdf_path: Path to PDF file
+            page_number: Page number (1-indexed)
+            
+        Returns:
+            Extracted text or empty string
+        """
+        try:
+            reader = PdfReader(pdf_path)
+            # Convert to 0-indexed
+            page_idx = page_number - 1
+            
+            if page_idx < 0 or page_idx >= len(reader.pages):
+                logger.warning(f"Invalid page number {page_number} for PDF {pdf_path}")
+                return ""
+            
+            page = reader.pages[page_idx]
+            text = page.extract_text()
+            
+            if text and len(text.strip()) > 0:
+                logger.debug(f"PyPDF2 extracted {len(text)} characters from page {page_number}")
+                return text.strip()
+            else:
+                logger.debug(f"PyPDF2 found no text on page {page_number}")
+                return ""
+                
+        except Exception as e:
+            logger.error(f"PyPDF2 extraction failed: {e}")
+            return ""

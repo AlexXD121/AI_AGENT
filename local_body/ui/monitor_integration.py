@@ -34,9 +34,9 @@ def render_system_monitor_sidebar() -> None:
     }
     
     status_icons = {
-        HealthStatus.OK: "✓",
-        HealthStatus.WARNING: "⚠️",
-        HealthStatus.CRITICAL: "🚨"
+        HealthStatus.OK: "🟢",
+        HealthStatus.WARNING: "🟡",
+        HealthStatus.CRITICAL: "🔴"
     }
     
     status_color = status_colors[metrics.health_status]
@@ -52,7 +52,7 @@ def render_system_monitor_sidebar() -> None:
         margin-bottom: 1rem;
     ">
         <p style="margin: 0; color: {status_color}; font-weight: 600; font-size: 0.9rem;">
-            {status_icon} Status: {status_text}
+            <span style="font-size: 1.2rem; line-height: 0;">●</span> {status_text}
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -106,7 +106,7 @@ def render_system_monitor_sidebar() -> None:
     # Manual cleanup button
     st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
     
-    if st.button("🧹 Clean Memory", key="manual_cleanup", use_container_width=True):
+    if st.button("Clean Memory", key="manual_cleanup", width="stretch"):
         with st.spinner("Cleaning up memory..."):
             monitor.attempt_memory_cleanup(force=True)
             st.success("Memory cleanup complete!")

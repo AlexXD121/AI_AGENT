@@ -23,276 +23,292 @@ st.set_page_config(
 )
 
 # Professional Dark Theme CSS
-st.markdown("""
-<style>
-    /* Hide Streamlit branding */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    
-    /* Global typography */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-    
-    html, body, [class*="css"] {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    }
-    
-    /* Dark background */
-    .stApp {
-        background-color: #0F0F0F;
-    }
-    
-    /* Main container */
-    .main .block-container {
-        padding-top: 3rem;
-        padding-bottom: 2rem;
-        max-width: 1400px;
-        background-color: #0F0F0F;
-    }
-    
-    /* Headers */
-    h1 {
-        font-weight: 700;
-        font-size: 2.5rem;
-        letter-spacing: -0.02em;
-        color: #FFFFFF;
-        margin-bottom: 0.5rem;
-    }
-    
-    h2 {
-        font-weight: 600;
-        font-size: 1.5rem;
-        color: #E5E5E5;
-        margin-bottom: 1rem;
-    }
-    
-    h3 {
-        font-weight: 600;
-        font-size: 1.125rem;
-        color: #D4D4D4;
-        margin-bottom: 0.75rem;
-    }
-    
-    /* Paragraph text */
-    p {
-        color: #A3A3A3;
-    }
-    
-    /* Flat toast notifications */
-    .stAlert {
-        border-radius: 0.5rem;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
-        padding: 1rem 1.5rem;
-    }
-    
-    /* Info box */
-    .stAlert[data-baseweb="notification"] {
-        background-color: #1E293B;
-        color: #60A5FA;
-        border-color: #3B82F6;
-    }
-    
-    /* Success box */
-    .stSuccess {
-        background-color: #1E3A2C;
-        color: #34D399;
-        border-color: #10B981;
-    }
-    
-    /* Warning box */
-    .stWarning {
-        background-color: #3A2E1E;
-        color: #FBBF24;
-        border-color: #F59E0B;
-    }
-    
-    /* Error box */
-    .stError {
-        background-color: #3A1E1E;
-        color: #F87171;
-        border-color: #EF4444;
-    }
-    
-    /* Buttons */
-    .stButton > button {
-        border-radius: 0.5rem;
-        font-weight: 500;
-        padding: 0.625rem 1.25rem;
-        border: none;
-        transition: all 0.2s ease;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-    }
-    
-    .stButton > button:hover {
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-        transform: translateY(-1px);
-    }
-    
-    /* Primary button - Electric Blue */
-    .stButton > button[kind="primary"] {
-        background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
-        color: white;
-    }
-    
-    .stButton > button[kind="primary"]:hover {
-        background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
-    }
-    
-    /* Secondary button */
-    .stButton > button[kind="secondary"] {
-        background-color: #1F1F1F;
-        color: #E5E5E5;
-        border: 1px solid #404040;
-    }
-    
-    .stButton > button[kind="secondary"]:hover {
-        background-color: #2A2A2A;
-        border-color: #525252;
-    }
-    
-    /* File uploader */
-    .stFileUploader {
-        border: 2px dashed #404040;
-        border-radius: 0.75rem;
-        padding: 3rem;
-        background: linear-gradient(135deg, #1A1A1A 0%, #0F0F0F 100%);
-        transition: all 0.3s ease;
-    }
-    
-    .stFileUploader:hover {
-        border-color: #3B82F6;
-        background: linear-gradient(135deg, #1F1F1F 0%, #141414 100%);
-    }
-    
-    /* Metrics */
-    [data-testid="stMetricValue"] {
-        font-size: 2rem;
-        font-weight: 700;
-        color: #FFFFFF;
-    }
-    
-    [data-testid="stMetricLabel"] {
-        font-size: 0.875rem;
-        font-weight: 500;
-        color: #737373;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-    }
-    
-    [data-testid="stMetricDelta"] {
-        color: #60A5FA;
-    }
-    
-    /* Dataframes */
-    .stDataFrame {
-        border-radius: 0.5rem;
-        overflow: hidden;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
-        background-color: #1A1A1A;
-    }
-    
-    /* Containers with borders */
-    [data-testid="stVerticalBlock"] > [style*="border"] {
-        border-radius: 0.75rem;
-        border-color: #262626;
-        background-color: #171717;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
-    }
-    
-    /* Progress bars */
-    .stProgress > div > div {
-        background: linear-gradient(90deg, #3B82F6 0%, #8B5CF6 100%);
-        border-radius: 9999px;
-    }
-    
-    /* Professional card styling */
-    .professional-card {
-        background: linear-gradient(135deg, #1F1F1F 0%, #171717 100%);
-        border-radius: 0.75rem;
-        padding: 1.5rem;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
-        border: 1px solid #262626;
-        margin-bottom: 1rem;
-    }
-    
-    /* Conflict card */
-    .conflict-card {
-        background: linear-gradient(135deg, #3A2E1E 0%, #2D2416 100%);
-        border-left: 4px solid #F59E0B;
-        padding: 1.25rem;
-        border-radius: 0.5rem;
-        margin-bottom: 1rem;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-    }
-    
-    /* Status badge */
-    .status-badge {
-        display: inline-block;
-        padding: 0.375rem 0.875rem;
-        border-radius: 9999px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-    }
-    
-    .status-success {
-        background: linear-gradient(135deg, #10B981 0%, #059669 100%);
-        color: #FFFFFF;
-    }
-    
-    .status-warning {
-        background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
-        color: #FFFFFF;
-    }
-    
-    .status-error {
-        background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
-        color: #FFFFFF;
-    }
-    
-    /* Sidebar */
-    [data-testid="stSidebar"] {
-        background-color: #0A0A0A;
-        border-right: 1px solid #1F1F1F;
-    }
-    
-    [data-testid="stSidebar"] h3 {
-        color: #FFFFFF;
-    }
-    
-    [data-testid="stSidebar"] p {
-        color: #737373;
-    }
-    
-    /* Dividers */
-    hr {
-        border-color: #262626;
-    }
-    
-    /* Input fields */
-    .stTextInput > div > div > input,
-    .stNumberInput > div > div > input,
-    .stSelectbox > div > div {
-        background-color: #1A1A1A;
-        color: #E5E5E5;
-        border-color: #404040;
-    }
-    
-    /* Captions */
-    .st-caption {
-        color: #737373 !important;
-    }
-    
-    /* Section dividers with gradient */
-    .section-divider {
-        height: 1px;
-        background: linear-gradient(90deg, transparent 0%, #3B82F6 50%, transparent 100%);
-        margin: 2rem 0;
-    }
-</style>
-""", unsafe_allow_html=True)
+# Professional Dark Theme CSS
+def load_css():
+    st.markdown("""
+    <style>
+        /* Hide Streamlit branding */
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header {visibility: hidden;}
+        
+        /* Global typography */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+        
+        html, body, [class*="css"] {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        
+        .mono {
+            font-family: 'JetBrains Mono', 'Consolas', monospace;
+        }
+        
+        /* Dark background */
+        .stApp {
+            background-color: #0F0F0F;
+        }
+        
+        /* Main container */
+        .main .block-container {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+            max-width: 100%;
+            background-color: #0F0F0F;
+        }
+        
+        /* Headers */
+        h1 {
+            font-weight: 700;
+            font-size: 2.5rem;
+            letter-spacing: -0.02em;
+            color: #FFFFFF;
+            margin-bottom: 0.5rem;
+        }
+        
+        h2 {
+            font-weight: 600;
+            font-size: 1.5rem;
+            color: #E5E5E5;
+            margin-bottom: 1rem;
+        }
+        
+        h3 {
+            font-weight: 600;
+            font-size: 1.125rem;
+            color: #D4D4D4;
+            margin-bottom: 0.75rem;
+        }
+        
+        /* Paragraph text */
+        p {
+            color: #A3A3A3;
+        }
+        
+        /* Flat toast notifications */
+        .stAlert {
+            border-radius: 0.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            padding: 1rem 1.5rem;
+        }
+        
+        /* Info box */
+        .stAlert[data-baseweb="notification"] {
+            background-color: #1E293B;
+            color: #60A5FA;
+            border-color: #3B82F6;
+        }
+        
+        /* Success box */
+        .stSuccess {
+            background-color: #1E3A2C;
+            color: #34D399;
+            border-color: #10B981;
+        }
+        
+        /* Warning box */
+        .stWarning {
+            background-color: #3A2E1E;
+            color: #FBBF24;
+            border-color: #F59E0B;
+        }
+        
+        /* Error box */
+        .stError {
+            background-color: #3A1E1E;
+            color: #F87171;
+            border-color: #EF4444;
+        }
+        
+        /* Buttons */
+        .stButton > button {
+            border-radius: 0.5rem;
+            font-weight: 500;
+            padding: 0.625rem 1.25rem;
+            border: none;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        .stButton > button:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            transform: translateY(-1px);
+        }
+        
+        /* Primary button - Electric Blue */
+        .stButton > button[kind="primary"] {
+            background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
+            color: white;
+        }
+        
+        .stButton > button[kind="primary"]:hover {
+            background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
+        }
+        
+        /* Secondary button */
+        .stButton > button[kind="secondary"] {
+            background-color: #1F1F1F;
+            color: #E5E5E5;
+            border: 1px solid #404040;
+        }
+        
+        .stButton > button[kind="secondary"]:hover {
+            background-color: #2A2A2A;
+            border-color: #525252;
+        }
+        
+        /* File uploader */
+        .stFileUploader {
+            border: 2px dashed #404040;
+            border-radius: 0.75rem;
+            padding: 2rem;
+            background: linear-gradient(135deg, #1A1A1A 0%, #0F0F0F 100%);
+            transition: all 0.3s ease;
+        }
+        
+        .stFileUploader:hover {
+            border-color: #3B82F6;
+            background: linear-gradient(135deg, #1F1F1F 0%, #141414 100%);
+        }
+        
+        /* Metrics */
+        [data-testid="stMetricValue"] {
+            font-family: 'JetBrains Mono', 'Consolas', monospace;
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #FFFFFF;
+        }
+        
+        [data-testid="stMetricLabel"] {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #737373;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
+        [data-testid="stMetricDelta"] {
+            font-family: 'JetBrains Mono', 'Consolas', monospace;
+            color: #60A5FA;
+        }
+        
+        /* Dataframes */
+        .stDataFrame {
+            border-radius: 0.5rem;
+            overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            background-color: #1A1A1A;
+        }
+        
+        /* Containers with borders */
+        [data-testid="stVerticalBlock"] > [style*="border"] {
+            border-radius: 0.75rem;
+            border-color: #262626;
+            background-color: #171717;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+        }
+        
+        /* Progress bars */
+        .stProgress > div > div {
+            background: linear-gradient(90deg, #3B82F6 0%, #8B5CF6 100%);
+            border-radius: 9999px;
+        }
+        
+        /* Status Elements */
+        .stStatus {
+             background-color: #171717;
+             border: 1px solid #262626;
+             border-radius: 0.75rem;
+        }
+
+        /* Professional card styling */
+        .professional-card {
+            background: linear-gradient(135deg, #1F1F1F 0%, #171717 100%);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            border: 1px solid #262626;
+            margin-bottom: 1rem;
+        }
+        
+        /* Conflict card */
+        .conflict-card {
+            background: linear-gradient(135deg, #3A2E1E 0%, #2D2416 100%);
+            border-left: 4px solid #F59E0B;
+            padding: 1.25rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        /* Sidebar */
+        [data-testid="stSidebar"] {
+            background-color: #0A0A0A;
+            border-right: 1px solid #1F1F1F;
+        }
+        
+        [data-testid="stSidebar"] h3 {
+            color: #FFFFFF;
+        }
+        
+        [data-testid="stSidebar"] p {
+            color: #737373;
+        }
+        
+        /* Dividers */
+        hr {
+            border-color: #262626;
+        }
+        
+        /* Input fields */
+        .stTextInput > div > div > input,
+        .stNumberInput > div > div > input,
+        .stSelectbox > div > div {
+            background-color: #1A1A1A;
+            color: #E5E5E5;
+            border-color: #404040;
+            font-family: 'JetBrains Mono', 'Consolas', monospace;
+        }
+        
+        /* Captions */
+        .st-caption {
+            color: #737373 !important;
+        }
+        
+        /* Tabs */
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 2rem;
+            background-color: transparent;
+        }
+
+        .stTabs [data-baseweb="tab"] {
+            height: 3rem;
+            white-space: pre-wrap;
+            background-color: transparent;
+            border-radius: 0px;
+            color: #737373;
+            font-weight: 500;
+        }
+
+        .stTabs [aria-selected="true"] {
+            background-color: transparent;
+            color: #3B82F6;
+            border-bottom: 2px solid #3B82F6;
+        }
+        
+        /* Section dividers with gradient */
+        .section-divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent 0%, #3B82F6 50%, transparent 100%);
+            margin: 2rem 0;
+        }
+        
+        /* JSON Tree */
+        .json-formatter-row {
+            font-family: 'JetBrains Mono', monospace !important;
+        }
+    </style>
+    """, unsafe_allow_html=True)
 
 
 def initialize_session_state():
@@ -378,6 +394,7 @@ def render_maintenance_screen(error):
 
 def main():
     """Main application entry point."""
+    load_css()
     initialize_session_state()
     
     # STEP 1: SYSTEM BOOTSTRAP

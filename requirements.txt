@@ -127,7 +127,7 @@ diskcache>=5.6.0  # For result caching (survives restarts)
 
 # Uncomment if needed:
 # streamlit-extras  # Additional Streamlit components
-# plotly>=5.0.0  # Interactive charts for benchmarks
+plotly>=5.0.0  # Interactive charts for analytics dashboard
 # matplotlib>=3.7.0  # Static charts
 # seaborn>=0.12.0  # Statistical visualization
 

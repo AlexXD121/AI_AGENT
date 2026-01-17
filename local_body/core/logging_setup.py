@@ -114,7 +114,7 @@ def setup_logging(
                 enqueue=True
             )
         
-        # Error log (separate file for errors only)
+        # Error log (separate file for errors only - FULL TRACEBACKS for debugging)
         error_log = log_dir / "errors.log"
         logger.add(
             error_log,
@@ -123,6 +123,8 @@ def setup_logging(
             rotation="5 MB",
             retention="60 days",
             compression="zip",
+            backtrace=True,  # ENABLED: Full traceback for debugging
+            diagnose=True,   # ENABLED: Include variable values 
             filter=redact_pii_filter if enable_pii_redaction else None,
             enqueue=True
         )

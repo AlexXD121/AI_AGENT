@@ -135,8 +135,10 @@ class ProcessingError(SovereignError):
         self,
         message: str,
         stage: str = "unknown",
+        step: Optional[str] = None,  # NEW: For decorator usage
         document_id: Optional[str] = None,
         page_number: Optional[int] = None,
+        original_error: Optional[Exception] = None,  # NEW: Store original exception
         **kwargs
     ):
         """Initialize processing error.
@@ -144,17 +146,25 @@ class ProcessingError(SovereignError):
         Args:
             message: Error description
             stage: Processing stage where error occurred
+            step: Specific step/function name (for decorator)
             document_id: Document being processed
             page_number: Page number if applicable
+            original_error: Original exception that was caught
             **kwargs: Additional details
         """
         details = {
             "stage": stage,
+            "step": step or stage,
             "document_id": document_id,
             "page_number": page_number,
             **kwargs
         }
+        if original_error:
+            details["original_error_type"] = type(original_error).__name__
+            details["original_error_message"] = str(original_error)
+        
         super().__init__(message, details=details, recoverable=True)
+        self.original_error = original_error
 
 
 class ConfigurationError(SovereignError):

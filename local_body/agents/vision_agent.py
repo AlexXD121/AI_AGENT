@@ -221,7 +221,7 @@ class VisionAgent(BaseAgent):
                         auth_header = security_mgr.get_auth_header()
                         headers.update(auth_header)
                     except ValueError as e:
-                        logger.error(f"Security token not configured: {e}")
+                        logger.info("Access token not configured. Switching to Local Mode.")
                         # Allow fallback to local in this case
                         raise ConnectionError("Access token not configured")
                     

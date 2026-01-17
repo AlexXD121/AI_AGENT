@@ -1,378 +1,333 @@
-"""Professional analysis dashboard with split-screen layout.
+"""Professional analysis dashboard with tabbed layout.
 
-Left: Document viewer with regions
-Right: Analysis report with conflicts and data
+Top: High-level metrics
+Tabs: Executive Summary, Conflict Resolution, Document Viewer, Analytics, Raw Data
 """
 
 from typing import Optional, Dict, Any
 
 import streamlit as st
 from loguru import logger
+import plotly.express as px
+import plotly.graph_objects as go
 
 from local_body.ui.viewer import DocumentViewer
+from local_body.ui.conflicts import render_conflict_panel
 from local_body.orchestration.state import DocumentProcessingState
 
 
 def render_analysis_dashboard(state: Optional[DocumentProcessingState]) -> None:
-    """Render the professional split-screen analysis dashboard.
+    """Render the professional tabbed analysis dashboard.
     
     Args:
         state: Current processing state
     """
-    # Header with reset button
+    # 1. Header & Global Actions
     col1, col2 = st.columns([3, 1])
     with col1:
-        st.markdown("## Analysis Report")
+        doc_name = st.session_state.get('document_name', 'Document')
+        st.markdown(f"## {doc_name}")
     with col2:
-        if st.button("New Document", type="secondary", width='stretch'):
+        if st.button("New Document", type="secondary", width="stretch"):
             st.session_state['processing_complete'] = False
             st.rerun()
     
     st.divider()
-    
-    # Split screen layout (60:40)
-    left_col, right_col = st.columns([6, 4])
-    
-    # Left: Document viewer
-    with left_col:
-        _render_document_source(state)
-    
-    # Right: Intelligence panel
-    with right_col:
-        _render_intelligence_panel(state)
+
+    # Debug: Check if state exists
+    if not state:
+        st.error("No processing state found. Please re-upload your document.")
+        logger.error("Dashboard called with None state!")
+        return
+
+    # Get analysis data
+    analysis_data = st.session_state.get('analysis_data', {})
 
 
-def _render_document_source(state: Optional[DocumentProcessingState]) -> None:
-    """Render the document viewer panel.
+    # 2. Top Level Metrics (KPIs)
+    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
     
-    Args:
-        state: Processing state
-    """
-    st.markdown("### Source Document")
+    # KPI 1: Confidence
+    confidence = analysis_data.get('confidence', 0.0)
+    conf_delta = "High Confidence" if confidence > 0.8 else "Review Needed"
+    conf_color = "normal" if confidence > 0.8 else "inverse"
     
-    # Document name
-    doc_name = st.session_state.get('document_name', 'Document')
-    st.caption(f"**{doc_name}**")
-    
-    st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
-    
-    # Render document if available
-    if state and state.get('document'):
-        document = state['document']
-        layout_regions = state.get('layout_regions', [])
+    kpi1.metric("Avg Confidence", f"{confidence:.1%}", conf_delta)
+
+    # KPI 2: Pages
+    pages = analysis_data.get('total_pages', len(state.get('document', {}).pages) if state.get('document') and hasattr(state.get('document'), 'pages') else 0)
+    kpi2.metric("Pages Processed", pages)
+
+    # KPI 3: Conflicts
+    conflicts_count = len(state.get('conflicts', []))
+    conflict_delta = f"{conflicts_count} active"
+    kpi3.metric("Conflicts Detected", conflicts_count, conflict_delta, delta_color="inverse")
+
+    # KPI 4: Regions
+    regions = analysis_data.get('total_regions', 0)
+    kpi4.metric("Extracted Fields", regions)
+
+    st.markdown("<div style='margin-bottom: 2rem;'></div>", unsafe_allow_html=True)
+
+    # 3. Main Tabbed Interface
+    tab_summary, tab_conflicts, tab_viewer, tab_analytics, tab_data = st.tabs([
+        "Executive Summary", 
+        "Conflict Resolution", 
+        "Document Viewer",
+        "Analytics",
+        "Raw Data"
+    ])
+
+    # --- TAB 1: EXECUTIVE SUMMARY ---
+    with tab_summary:
+        st.markdown("### Document Summary")
         
-        # Page selector if multi-page
-        if hasattr(document, 'pages') and len(document.pages) > 1:
-            page_number = st.slider(
-                "Page",
-                min_value=1,
-                max_value=len(document.pages),
-                value=1,
-                key="page_selector"
-            )
+        # Summary Content (extracted text preview)
+        document = state.get('document')
+        if document and hasattr(document, 'text') and document.text:
+            text_preview = document.text[:1000] + "..." if len(document.text) > 1000 else document.text
+            st.text_area("Extracted Text Content", text_preview, height=200)
         else:
-            page_number = 1
+            st.info("No text content extracted available for summary.")
+
+        st.markdown("### Key Extractions")
         
-        # Render page with regions
+        # Extracted Data Table
+        if document and hasattr(document, 'pages'):
+             # Reuse extraction logic
+            extracted_items = []
+            for page in document.pages:
+                for region in page.regions:
+                    if hasattr(region, 'content'):
+                        val = region.content.text if hasattr(region.content, 'text') else (f"Table ({len(region.content.rows)} rows)" if hasattr(region.content, 'rows') else "")
+                        if val:
+                            extracted_items.append({
+                                "Page": page.page_number,
+                                "Content": val[:100],
+                                "Confidence": f"{region.confidence:.1%}" if hasattr(region, 'confidence') else "N/A"
+                            })
+            
+            if extracted_items:
+                st.dataframe(extracted_items, width="stretch")
+            else:
+                st.caption("No specific fields extracted.")
+
+    # --- TAB 2: CONFLICT RESOLUTION ---
+    with tab_conflicts:
+         # Use the dedicated conflict panel component we optimized
+         doc_id = document.id if document and hasattr(document, 'id') else "unknown"
+         conflicts = state.get('conflicts', [])
+         
+         render_conflict_panel(doc_id, conflicts=conflicts)
+
+    # --- TAB 3: DOCUMENT VIEWER ---
+    with tab_viewer:
+        _render_document_viewer_tab(state)
+
+    # --- TAB 4: ANALYTICS ---
+    with tab_analytics:
+        _render_analytics_tab(state)
+
+    # --- TAB 5: RAW DATA ---
+    with tab_data:
+        st.markdown("### System State Inspection")
+        st.json(state, expanded=False)
+
+
+def _render_document_viewer_tab(state: Dict[str, Any]):
+    """Render the document viewer content inside the tab."""
+    document = state.get('document')
+    layout_regions = state.get('layout_regions', [])
+    
+    if document:
+        col_ctrl, col_view = st.columns([1, 5])
+        
+        # Initialize Viewer
         viewer = DocumentViewer()
         
-        try:
-            if hasattr(document, 'file_path') and document.file_path:
-                viewer.render_page(document.file_path, page_number, layout_regions)
+        with col_ctrl:
+            st.markdown("#### Page Control")
+            if hasattr(document, 'pages') and len(document.pages) > 1:
+                page_num = st.number_input("Page Number", min_value=1, max_value=len(document.pages), value=1)
             else:
-                st.info("Document preview not available")
-        except Exception as e:
-            logger.error(f"Viewer error: {e}")
-            st.warning("Could not render document preview")
-    
-    else:
-        # Placeholder
-        st.markdown("""
-        <div style="
-            background: #F9FAFB;
-            border: 2px dashed #D1D5DB;
-            border-radius: 0.5rem;
-            padding: 4rem 2rem;
-            text-align: center;
-            color: #9CA3AF;
-        ">
-            <p>Document preview will appear here</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-
-def _render_intelligence_panel(state: Optional[DocumentProcessingState]) -> None:
-    """Render the intelligence/analysis panel.
-    
-    Args:
-        state: Processing state
-    """
-    # Section 1: Executive Summary
-    st.markdown("### Executive Summary")
-    
-    analysis_data = st.session_state.get('analysis_data', {})
-    
-    # Get REAL values from analysis_data
-    confidence = analysis_data.get('confidence', 0.0)
-    total_regions = analysis_data.get('fields_extracted', 0)
-    
-    # Metrics with REAL data
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("Confidence", f"{confidence:.0%}")
-    with col2:
-        st.metric("Regions", total_regions)
-    
-    # Document metadata - show real data
-    total_pages = analysis_data.get('total_pages', 1)
-    text_regions = analysis_data.get('text_regions', 0)
-    table_regions = analysis_data.get('table_regions', 0)
-    
-    st.markdown(f"""
-    <div class="professional-card" style="margin-top: 1rem;">
-        <p style="margin: 0; color: #737373; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em;">Document Type</p>
-        <p style="margin: 0.5rem 0 0 0; font-weight: 600; color: #E5E5E5; font-size: 1rem;">{analysis_data.get('doc_type', 'PDF Document')}</p>
-        
-        <p style="margin: 1.25rem 0 0 0; color: #737373; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em;">Pages</p>
-        <p style="margin: 0.5rem 0 0 0; font-weight: 600; color: #E5E5E5; font-size: 1rem;">{total_pages} page(s)</p>
-        
-        <p style="margin: 1.25rem 0 0 0; color: #737373; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em;">Detected Regions</p>
-        <p style="margin: 0.5rem 0 0 0; font-weight: 600; color: #E5E5E5; font-size: 1rem;">{text_regions} text, {table_regions} tables</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.divider()
-    
-    # Section 2: Attention Required
-    st.markdown("### Attention Required")
-    
-    conflicts_count = analysis_data.get('conflicts_count', 0)
-    
-    if conflicts_count > 0:
-        _render_conflict_cards(state)
-    else:
-        st.markdown("""
-        <div class="professional-card" style="background: #ECFDF5; border-color: #10B981;">
-            <p style="margin: 0; color: #065F46; font-weight: 500;">
-                No conflicts detected
-            </p>
-            <p style="margin: 0.5rem 0 0 0; color: #059669; font-size: 0.875rem;">
-                All data verified successfully
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    st.divider()
-    
-    # Section 3: Extracted Data
-    st.markdown("### Extracted Data")
-    
-    # Get real document data
-    document = st.session_state.get('document')
-    layout_regions = st.session_state.get('layout_regions', [])
-    
-    if document and hasattr(document, 'pages') and document.pages:
-        # Extract text from all pages
-        extracted_items = []
-        
-        for page in document.pages:
-            for region in page.regions:
-                if hasattr(region, 'content'):
-                    # Extract text content
-                    text = ""
-                    region_type = region.region_type.value if hasattr(region, 'region_type') else 'unknown'
-                    confidence = region.confidence if hasattr(region, 'confidence') else 0.0
-                    
-                    if hasattr(region.content, 'text'):
-                        text = region.content.text[:100]  # First 100 chars
-                    elif hasattr(region.content, 'rows'):  # Table
-                        text = f"Table with {len(region.content.rows)} rows"
-                    
-                    if text:
-                        extracted_items.append({
-                            'Page': page.page_number,
-                            'Type': region_type.title(),
-                            'Content': text,
-                            'Confidence': f"{confidence:.0%}"
-                        })
-        
-        if extracted_items:
-            import pandas as pd
-            df = pd.DataFrame(extracted_items)
-            st.dataframe(df, width="stretch", hide_index=True)
-        else:
-            st.info("No text regions extracted yet. Basic layout detection needs YOLOv8 model.")
-    else:
-        st.info("No extracted data available yet. Upload a document to begin processing.")
-    
-    # Action buttons
-    st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Save to Knowledge Base button (primary action)
-        if st.button("💾 Save to Knowledge Base", type="primary", use_container_width=True):
-            import asyncio
-            from local_body.database.vector_store import DocumentVectorStore
-            
+                page_num = 1
+                st.caption("Single Page Document")
+                
+        with col_view:
             try:
-                with st.spinner("Indexing document to vector database..."):
-                    # Get document from state
-                    document = state.get('document') if state else None
-                    
-                    if document:
-                        # Initialize vector store
-                        vector_store = DocumentVectorStore()
-                        
-                        # Ingest document (handle async)
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                        try:
-                            loop.run_until_complete(vector_store.ingest_document(document))
-                        finally:
-                            loop.close()
-                        
-                        # Success!
-                        st.toast("✅ Document indexed successfully!", icon="✅")
-                        st.balloons()
-                        st.success(f"Document '{document.file_path}' saved to knowledge base!")
-                    else:
-                        st.error("No document available to save")
-                        
+                # Use temp path if available for rendering
+                if hasattr(document, 'file_path') and document.file_path:
+                    viewer.render_page(document.file_path, page_num, layout_regions)
+                elif 'temp_file_path' in st.session_state:
+                     viewer.render_page(st.session_state['temp_file_path'], page_num, layout_regions)
+                else:
+                    st.warning("Document source file not found for preview.")
             except Exception as e:
-                st.error(f"Failed to save to knowledge base: {str(e)}")
-                logger.error(f"Vector store save error: {e}")
-    
-    with col2:
-        # Export button (secondary action)
-        if st.button("📤 Export Results", type="secondary", use_container_width=True):
-            st.info("Export functionality: Download as JSON, Excel, or Markdown")
+                st.error(f"Error rendering preview: {e}")
+    else:
+        st.warning("No document loaded.")
 
 
-def _render_conflict_cards(state: Optional[DocumentProcessingState]) -> None:
-    """Render conflict resolution cards with REAL conflict data.
+def _render_analytics_tab(state: Dict[str, Any]):
+    """Render analytics visualizations using Plotly.
     
     Args:
-        state: Processing state with real conflicts from workflow
+        state: Processing state with document data
     """
-    if not state:
-        st.info("No state available")
-        return
+    st.markdown("### Document Analytics")
     
-    # Get real conflicts from workflow state
+    document = state.get('document')
     conflicts = state.get('conflicts', [])
     
-    if not conflicts:
-        st.success("✅ No conflicts detected - all extractions match!")
+    if not document:
+        st.info("No document data available for analytics.")
         return
     
-    st.caption(f"{len(conflicts)} conflict(s) detected")
+    # === GRAPH A: Content Composition (Donut Chart) ===
+    st.markdown("#### Content Composition")
     
-    # Render each real conflict
-    for idx, conflict in enumerate(conflicts):
-        # Extract conflict properties (handle both object attributes and dict keys)
-        conflict_type = getattr(conflict, 'conflict_type', conflict.get('conflict_type', 'Data Mismatch') if isinstance(conflict, dict) else 'Data Mismatch')
-        impact = getattr(conflict, 'impact_score', conflict.get('impact_score', 0.5) if isinstance(conflict, dict) else 0.5)
+    if hasattr(document, 'pages') and document.pages:
+        # Count region types across all pages
+        region_counts = {}
+        for page in document.pages:
+            for region in page.regions:
+                region_type = region.region_type.value if hasattr(region, 'region_type') else 'unknown'
+                region_counts[region_type] = region_counts.get(region_type, 0) + 1
         
-        source_a = getattr(conflict, 'source_a', conflict.get('source_a', 'OCR') if isinstance(conflict, dict) else 'OCR')
-        source_b = getattr(conflict, 'source_b', conflict.get('source_b', 'Vision') if isinstance(conflict, dict) else 'Vision')
-        
-        value_a = str(getattr(conflict, 'value_a', conflict.get('value_a', 'N/A') if isinstance(conflict, dict) else 'N/A'))
-        value_b = str(getattr(conflict, 'value_b', conflict.get('value_b', 'N/A') if isinstance(conflict, dict) else 'N/A'))
-        
-        confidence_a = getattr(conflict, 'confidence_a', conflict.get('confidence_a', 0.0) if isinstance(conflict, dict) else 0.0)
-        confidence_b = getattr(conflict, 'confidence_b', conflict.get('confidence_b', 0.0) if isinstance(conflict, dict) else 0.0)
-        
-        # Determine severity color
-        if impact >= 0.7:
-            title_color = "#EF4444"  # Red - High Impact
-        elif impact >= 0.4:
-            title_color = "#FBBF24"  # Yellow - Medium
+        if region_counts:
+            # Create donut chart
+            fig = px.pie(
+                names=list(region_counts.keys()),
+                values=list(region_counts.values()),
+                title="Document Structure by Region Type",
+                hole=0.4,  # Makes it a donut chart
+                color_discrete_sequence=px.colors.sequential.Blues_r
+            )
+            fig.update_traces(textposition='inside', textinfo='percent+label')
+            fig.update_layout(
+                showlegend=True,
+                height=400,
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                font_color='#E5E5E5'
+            )
+            st.plotly_chart(fig, key="content_composition")
         else:
-            title_color = "#10B981"  # Green - Low
-        
-        # Conflict card header
-        st.markdown(f"""
-        <div class="conflict-card">
-            <p style="margin: 0; font-weight: 600; color: {title_color}; font-size: 0.9rem;">
-                Conflict #{idx + 1}: {conflict_type}
-            </p>
-            <p style="margin: 0.25rem 0 0 0; font-size: 0.75rem; color: #737373;">
-                Impact Score: {impact:.2f}
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Values comparison (side-by-side)
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown(f"""
-            <div style="padding: 1rem; background: #1F1F1F; border-radius: 0.5rem; border: 1px solid #404040;">
-                <p style="margin: 0; font-size: 0.75rem; color: #737373; text-transform: uppercase; letter-spacing: 0.05em;">
-                    {source_a}
-                </p>
-                <p style="margin: 0.5rem 0 0 0; font-weight: 700; color: #FFFFFF; font-size: 1.125rem;">
-                    {value_a}
-                </p>
-                <p style="margin: 0.5rem 0 0 0; font-size: 0.75rem; color: #10B981;">
-                    {confidence_a:.0%} confidence
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col2:
-            st.markdown(f"""
-            <div style="padding: 1rem; background: #1F1F1F; border-radius: 0.5rem; border: 1px solid #404040;">
-                <p style="margin: 0; font-size: 0.75rem; color: #737373; text-transform: uppercase; letter-spacing: 0.05em;">
-                    {source_b}
-                </p>
-                <p style="margin: 0.5rem 0 0 0; font-weight: 700; color: #FFFFFF; font-size: 1.125rem;">
-                    {value_b}
-                </p>
-                <p style="margin: 0.5rem 0 0 0; font-size: 0.75rem; color: #3B82F6;">
-                    {confidence_b:.0%} confidence
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # Check for resolution
-        resolutions = state.get('resolutions', [])
-        conflict_id = getattr(conflict, 'id', conflict.get('id', None) if isinstance(conflict, dict) else None)
-        
-        if conflict_id and resolutions:
-            # Find matching resolution
-            resolution = next(
-                (r for r in resolutions 
-                 if (getattr(r, 'conflict_id', None) == conflict_id or 
-                     (isinstance(r, dict) and r.get('conflict_id') == conflict_id))),
-                None
-            )
+            st.caption("No regions detected.")
+    else:
+        st.caption("No page data available.")
+    
+    st.divider()
+    
+    # === GRAPH B: Confidence Analysis (Bar Chart) ===
+    st.markdown("#### Confidence Analysis by Page")
+    
+    if hasattr(document, 'pages') and document.pages:
+        # Extract confidence scores per page
+        page_data = []
+        for page in document.pages:
+            ocr_confidences = []
+            for region in page.regions:
+                if hasattr(region, 'confidence'):
+                    ocr_confidences.append(region.confidence)
             
-            if resolution:
-                chosen_value = getattr(resolution, 'chosen_value', resolution.get('chosen_value', 'N/A') if isinstance(resolution, dict) else 'N/A')
-                method = getattr(resolution, 'resolution_method', resolution.get('resolution_method', 'auto') if isinstance(resolution, dict) else 'auto')
-                
-                st.success(f"✓ Resolved ({method}): {chosen_value}")
+            avg_ocr_conf = sum(ocr_confidences) / len(ocr_confidences) if ocr_confidences else 0.0
+            
+            page_data.append({
+                'Page': page.page_number,
+                'OCR Confidence': avg_ocr_conf,
+                'Source': 'OCR'
+            })
         
-        # Action buttons
-        btn_col1, btn_col2 = st.columns(2)
-        with btn_col1:
-            st.button(
-                f"Accept {source_a}",
-                key=f"accept_a_{idx}",
-                type="secondary",
-                use_container_width=True
+        # Vision confidence (if available)
+        vision_results = state.get('vision_results', {})
+        for page_num, vision_data in vision_results.items():
+            if isinstance(vision_data, dict) and 'confidence' in vision_data:
+                page_data.append({
+                    'Page': page_num,
+                    'OCR Confidence': vision_data['confidence'],
+                    'Source': 'Vision'
+                })
+        
+        if page_data:
+            # Create grouped bar chart
+            import pandas as pd
+            df = pd.DataFrame(page_data)
+            
+            fig = px.bar(
+                df,
+                x='Page',
+                y='OCR Confidence',
+                color='Source',
+                title="Confidence Scores Across Pages",
+                barmode='group',
+                color_discrete_map={'OCR': '#3B82F6', 'Vision': '#8B5CF6'}
             )
-        
-        with btn_col2:
-            st.button(
-                f"Accept {source_b}",
-                key=f"accept_b_{idx}",
-                type="primary",
-                use_container_width=True
+            fig.update_layout(
+                yaxis_title="Confidence Score",
+                xaxis_title="Page Number",
+                yaxis_range=[0, 1],
+                height=400,
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                font_color='#E5E5E5'
             )
+            st.plotly_chart(fig, key="confidence_analysis")
+        else:
+            st.caption("No confidence data available.")
+    else:
+        st.caption("No page data available.")
+    
+    st.divider()
+    
+    # === GRAPH C: Conflict Impact Analysis (Scatter Plot) ===
+    st.markdown("#### Conflict Impact Analysis")
+    
+    if conflicts:
+        # Extract conflict data
+        conflict_data = []
+        for conflict in conflicts:
+            # Handle both object attributes and dict keys
+            page_num = getattr(conflict, 'page_number', conflict.get('page_number', 1) if isinstance(conflict, dict) else 1)
+            impact = getattr(conflict, 'impact_score', conflict.get('impact_score', 0.5) if isinstance(conflict, dict) else 0.5)
+            conflict_type = str(getattr(conflict, 'conflict_type', conflict.get('conflict_type', 'Unknown') if isinstance(conflict, dict) else 'Unknown'))
+            
+            # Get conflicting values for tooltip
+            value_a = str(getattr(conflict, 'text_value', conflict.get('text_value', 'N/A') if isinstance(conflict, dict) else 'N/A'))[:30]
+            value_b = str(getattr(conflict, 'vision_value', conflict.get('vision_value', 'N/A') if isinstance(conflict, dict) else 'N/A'))[:30]
+            
+            conflict_data.append({
+                'Page': page_num,
+                'Impact Score': impact,
+                'Type': conflict_type,
+                'Details': f"OCR: {value_a} | Vision: {value_b}"
+            })
         
-        st.markdown("<div style='margin-bottom: 1.5rem;'></div>", unsafe_allow_html=True)
-
+        if conflict_data:
+            import pandas as pd
+            df = pd.DataFrame(conflict_data)
+            
+            fig = px.scatter(
+                df,
+                x='Page',
+                y='Impact Score',
+                color='Type',
+                size='Impact Score',
+                hover_data=['Details'],
+                title="Conflict Severity Distribution",
+                color_discrete_sequence=px.colors.qualitative.Set2
+            )
+            fig.update_layout(
+                yaxis_title="Impact Score (Severity)",
+                xaxis_title="Page Number",
+                yaxis_range=[0, 1],
+                height=400,
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                font_color='#E5E5E5'
+            )
+            st.plotly_chart(fig, key="conflict_impact")
+        else:
+            st.caption("No conflict data to visualize.")
+    else:
+        st.success("No conflicts detected - all extractions are consistent!")

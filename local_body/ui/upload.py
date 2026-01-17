@@ -62,7 +62,7 @@ def render_upload_hero() -> None:
             
             if check_system_ready_for_processing():
                 # System is healthy - show button and allow processing
-                if st.button("Analyze Document", type="primary", use_container_width=True):
+                if st.button("Analyze Document", type="primary", width="stretch"):
                     import asyncio
                     asyncio.run(_process_document(uploaded_file))
             else:
@@ -70,7 +70,7 @@ def render_upload_hero() -> None:
                 st.button(
                     "Analyze Document (System Not Ready)", 
                     type="primary", 
-                    use_container_width=True,
+                    width="stretch",
                     disabled=True,
                     help="System resources are critical or in cool-down mode. Please wait."
                 )
@@ -198,38 +198,67 @@ async def _process_document(uploaded_file) -> None:
         logger.info("Initial state prepared")
         
         # Stage 3: Execute multi-agent workflow
-        status_placeholder.info("🤖 Starting multi-agent processing...")
-        progress_placeholder.progress(0.2)
-        
-        workflow = DocumentWorkflow()
-        
-        # Execute workflow with progress updates
-        with st.spinner("Agents are analyzing document..."):
-            # Layout Detection
-            status_placeholder.info("🔍 Layout Detection Agent working...")
-            progress_placeholder.progress(0.3)
+        with st.status("AI Agents working...", expanded=True) as status:
+            status.write("Layout Agent: Scanning structure...")
+            progress_placeholder.progress(0.25)
             
-            # OCR Extraction
-            status_placeholder.info("📖 OCR Agent extracting text...")
-            progress_placeholder.progress(0.5)
+            status.write("Starting Agent Swarm...")
             
-            # Vision Analysis
-            status_placeholder.info("👁️ Vision Agent analyzing content...")
-            progress_placeholder.progress(0.7)
-            
-            # Conflict Validation
-            status_placeholder.info("⚖️ Validation Agent checking conflicts...")
-            progress_placeholder.progress(0.85)
+            # Initialize workflow
+            workflow = DocumentWorkflow()
             
             # Run the workflow
             result_state = await workflow.run(initial_state)
             
-            logger.success(f"Workflow completed: stage={result_state.get('processing_stage')}")
+            status.update(label="AI Agents Finished!", state="complete", expanded=False)
+            
+        # Post-process
+        status_placeholder.empty() # Clear old placeholder
+        progress_placeholder.empty() # Clear progress bar
+             
+        # Stage 4: Check for workflow failures FIRST
+        processing_stage = result_state.get('processing_stage', 'UNKNOWN')
         
-        # Stage 4: Process results and update session state
-        status_placeholder.info("✅ Finalizing results...")
-        progress_placeholder.progress(0.95)
+        if processing_stage == 'FAILED':
+            # Workflow failed - display error to user
+            failed_node = result_state.get('failed_node', 'Unknown')
+            error_message = result_state.get('error', 'Unknown error occurred')
+            error_log = result_state.get('error_log', [])
+            
+            st.error(f"**Processing Failed at: {failed_node}**")
+            st.markdown(f"**Error:** {error_message}")
+            
+            # Show error details in expander
+            with st.expander("View Technical Details"):
+                st.markdown("### Error Log")
+                for idx, err in enumerate(error_log):
+                    st.markdown(f"**Step {idx + 1}: {err.get('node', 'Unknown')}**")
+                    st.code(f"{err.get('type', 'Error')}: {err.get('error', 'No details')}")
+                
+                # Read last 50 lines from error log file
+                st.markdown("### Recent Error Logs")
+                try:
+                    from pathlib import Path
+                    error_log_path = Path("logs/errors.log")
+                    if error_log_path.exists():
+                        with open(error_log_path, 'r') as f:
+                            lines = f.readlines()
+                            recent_logs = ''.join(lines[-50:])  # Last 50 lines
+                            st.code(recent_logs, language='log')
+                    else:
+                        st.caption("Error log file not found")
+                except Exception as log_err:
+                    st.caption(f"Could not read error logs: {log_err}")
+            
+            # Store failed state
+            st.session_state['current_state'] = result_state
+            st.session_state['processing_complete'] = False
+            st.session_state['processing_failed'] = True
+            
+            logger.error(f"Workflow failed at {failed_node}: {error_message}")
+            return
         
+        # SUCCESS PATH - Process results and update session state
         # Store complete state
         st.session_state['current_state'] = result_state
         
@@ -239,14 +268,12 @@ async def _process_document(uploaded_file) -> None:
         
         # Mark processing as complete
         st.session_state['processing_complete'] = True
-        
-        # Success
-        progress_placeholder.progress(1.0)
-        status_placeholder.success("✅ Document processing complete!")
+        st.session_state['processing_failed'] = False
         
         logger.info(f"Analysis complete: {len(result_state.get('conflicts', []))} conflicts detected")
         
-        # Auto-advance to dashboard
+        # Success feedback
+        st.toast("Analysis Complete!")
         time.sleep(0.5)
         st.rerun()
         
