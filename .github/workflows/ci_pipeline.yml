@@ -110,7 +110,7 @@ jobs:
     
     - name: Upload test report
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: pytest-report-${{ matrix.python-version }}
         path: pytest_report.html
@@ -147,7 +147,7 @@ jobs:
     
     - name: Upload benchmark reports
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: benchmark-reports
         path: tests/benchmarks/reports/
